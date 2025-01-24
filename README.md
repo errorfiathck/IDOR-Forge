@@ -34,6 +34,10 @@ IDOR Forge is a powerful and versatile tool designed to detect Insecure Direct O
 
 ![Screen Shot](./IMG/Screenshot_20250124_180012.png)
 
+## Flowchart 💾
+
+![Screen Shot](./IMG/FlowChart.png)
+
 ## Features ✨
 
 - Dynamic Payload Generation: Tests a wide range of inputs, including numeric values, random strings, and special characters.
