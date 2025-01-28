@@ -8,11 +8,17 @@ import csv
 import sys
 from typing import Dict, List, Optional, Union
 from tkinter import Tk, Label, Entry, Button, Text, Scrollbar, END, messagebox, ttk
+from core.banner import banner
 import threading
 from bs4 import BeautifulSoup
-from core.banner import banner
 import random
 import string
+import uuid
+import base64
+from colorama import Fore, Style, init
+
+# Initialize colorama for colored output
+init(autoreset=True)
 
 class IDORChecker:
     def __init__(
@@ -23,6 +29,8 @@ class IDORChecker:
         proxy: Optional[Dict] = None,
         verbose: bool = False,
         sensitive_keywords: Optional[List[str]] = None,
+        timeout: int = 10,
+        max_retries: int = 3,
     ):
         """
         Initialize the IDORChecker with the target URL, delay between requests, custom headers, proxy, verbose mode, and sensitive keywords.
@@ -42,6 +50,9 @@ class IDORChecker:
         ]  # Sensitive keywords to detect
         self.session = requests.Session()  # Use a session for persistent connections
         self.rate_limit_detected = False  # Flag to detect rate limiting
+        self.timeout = timeout  # Timeout for requests
+        self.max_retries = max_retries  # Maximum number of retries for failed requests
+        self.payload_history = []  # Track all tested payloads
 
     def _parse_url(self, url: str) -> tuple:
         """
@@ -55,26 +66,34 @@ class IDORChecker:
             params = parse_qs(parsed_url.query)
             return base_url, params
         except Exception as e:
-            print(f"Error parsing URL: {e}")
+            print(f"{Fore.RED}Error parsing URL: {e}{Style.RESET_ALL}")
             raise
 
     def _generate_payloads(self, param: str, values: List[str]) -> List[Dict]:
         """
         Generate dynamic payloads by replacing the specified parameter with the given values.
-        Includes advanced payloads like random strings, numbers, and special characters.
+        Includes advanced payloads like random strings, numbers, special characters, UUIDs, and encoded values.
         """
         payloads = []
         for value in values:
+            # Convert value to string if it's not already
+            value_str = str(value)
+
             # Basic payload
             new_params = self.params.copy()
-            new_params[param] = value
+            new_params[param] = value_str
             payloads.append(new_params)
 
             # Advanced payloads
-            payloads.append({**new_params, "random_str": self._generate_random_string(10)})  # Add random string
-            payloads.append({**new_params, "random_num": random.randint(1000, 9999)})  # Add random number
-            payloads.append({**new_params, "special_chars": "!@#$%^&*()"})  # Add special characters
+            payloads.append({**new_params, "random_str": self._generate_random_string(10)})  # Random string
+            payloads.append({**new_params, "random_num": random.randint(1000, 9999)})  # Random number
+            payloads.append({**new_params, "special_chars": "!@#$%^&*()"})  # Special characters
+            payloads.append({**new_params, "uuid": str(uuid.uuid4())})  # UUID
+            payloads.append({**new_params, "base64": base64.b64encode(value_str.encode()).decode()})  # Base64 encoded
+            payloads.append({**new_params, "sql_injection": "' OR '1'='1"})  # SQL injection payload
+            payloads.append({**new_params, "xss": "<script>alert('XSS')</script>"})  # XSS payload
         return payloads
+
 
     def _generate_random_string(self, length: int) -> str:
         """
@@ -86,26 +105,30 @@ class IDORChecker:
         """
         Send a request with the given parameters and HTTP method.
         """
-        try:
-            request_args = {
-                "headers": self.headers,
-                "proxies": self.proxy,
-                "timeout": 10,  # Timeout for requests
-            }
-            if method.upper() == "GET":
-                response = self.session.get(self.base_url, params=params, **request_args)
-            elif method.upper() == "POST":
-                response = self.session.post(self.base_url, data=params, **request_args)
-            elif method.upper() == "PUT":
-                response = self.session.put(self.base_url, data=params, **request_args)
-            elif method.upper() == "DELETE":
-                response = self.session.delete(self.base_url, data=params, **request_args)
-            else:
-                raise ValueError(f"Unsupported HTTP method: {method}")
-            return response
-        except requests.RequestException as e:
-            print(f"Request failed: {e}")
-            return None
+        retries = 0
+        while retries < self.max_retries:
+            try:
+                request_args = {
+                    "headers": self.headers,
+                    "proxies": self.proxy,
+                    "timeout": self.timeout,
+                }
+                if method.upper() == "GET":
+                    response = self.session.get(self.base_url, params=params, **request_args)
+                elif method.upper() == "POST":
+                    response = self.session.post(self.base_url, data=params, **request_args)
+                elif method.upper() == "PUT":
+                    response = self.session.put(self.base_url, data=params, **request_args)
+                elif method.upper() == "DELETE":
+                    response = self.session.delete(self.base_url, data=params, **request_args)
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+                return response
+            except requests.RequestException as e:
+                retries += 1
+                print(f"{Fore.YELLOW}Request failed (Attempt {retries}/{self.max_retries}): {e}{Style.RESET_ALL}")
+                time.sleep(self.delay * retries)  # Increase delay with each retry
+        return None
 
     def _detect_sensitive_data(self, response_text: str) -> bool:
         """
@@ -131,7 +154,7 @@ class IDORChecker:
         Test a single payload and return the result.
         """
         if self.verbose:
-            print(f"Testing payload: {payload}")
+            print(f"{Fore.CYAN}Testing payload: {payload}{Style.RESET_ALL}")
         response = self._send_request(payload, method)
         if response is None:
             return {}
@@ -139,7 +162,7 @@ class IDORChecker:
         # Detect rate limiting
         if self._detect_rate_limiting(response):
             self.rate_limit_detected = True
-            print("Rate limiting detected. Adjusting delay...")
+            print(f"{Fore.YELLOW}Rate limiting detected. Adjusting delay...{Style.RESET_ALL}")
             time.sleep(self.delay * 2)  # Increase delay to avoid further rate limiting
 
         result = {
@@ -150,10 +173,10 @@ class IDORChecker:
         }
 
         if self.verbose:
-            print(f"Status Code: {response.status_code}")
-            print(f"Response Content: {result['response_content']}...")
+            print(f"{Fore.GREEN}Status Code: {response.status_code}{Style.RESET_ALL}")
+            print(f"{Fore.GREEN}Response Content: {result['response_content']}...{Style.RESET_ALL}")
             if result["sensitive_data_detected"]:
-                print("Sensitive data detected!")
+                print(f"{Fore.RED}Sensitive data detected!{Style.RESET_ALL}")
             print("-" * 40)
 
         # Delay between requests to avoid rate limiting
@@ -181,6 +204,7 @@ class IDORChecker:
                 result = future.result()
                 if result:
                     results.append(result)
+                    self.payload_history.append(result)  # Track payload history
 
         # Save results to file if output file is provided
         if output_file:
@@ -188,7 +212,10 @@ class IDORChecker:
                 self._save_results_csv(results, output_file)
             else:
                 self._save_results_txt(results, output_file)
-            print(f"Results saved to {output_file}")
+            print(f"{Fore.GREEN}Results saved to {output_file}{Style.RESET_ALL}")
+
+        # Display summary
+        self._display_summary(results)
 
     def _save_results_txt(self, results: List[Dict], output_file: str):
         """
@@ -219,6 +246,20 @@ class IDORChecker:
                     ]
                 )
 
+    def _display_summary(self, results: List[Dict]):
+        """
+        Display a summary of the scan results.
+        """
+        vulnerabilities = [result for result in results if result["sensitive_data_detected"]]
+        print(f"{Fore.CYAN}Scan Summary:{Style.RESET_ALL}")
+        print(f"{Fore.GREEN}Total Payloads Tested: {len(results)}{Style.RESET_ALL}")
+        print(f"{Fore.RED}Vulnerabilities Found: {len(vulnerabilities)}{Style.RESET_ALL}")
+        if vulnerabilities:
+            print(f"{Fore.RED}Vulnerable Payloads:{Style.RESET_ALL}")
+            for vuln in vulnerabilities:
+                print(f"{Fore.RED}- {vuln['payload']}{Style.RESET_ALL}")
+
+# Rest of the code remains the same...
 def interactive_mode():
     """
     Launch an interactive GUI for IDOR testing.
@@ -266,10 +307,9 @@ def interactive_mode():
 
         for param in checker.params.keys():
             output_text.insert(END, f"Scanning parameter: {param}\n")
-            checker.check_idor(param, test_values, output_file=output_file)
+            checker.check_idor(param, test_values, output_file=output_file, output_text=output_text)
             progress["value"] += len(test_values)
             root.update_idletasks()
-            output_text.insert(END, "-" * 40 + "\n")
 
         output_text.insert(END, "Scan complete!\n")
 
@@ -287,11 +327,11 @@ def main():
     parser.add_argument("-d", "--delay", type=float, default=1, help="Delay between requests (in seconds)")
     parser.add_argument("-o", "--output", help="Output file to save results")
     parser.add_argument("--output-format", choices=["txt", "csv"], default="txt", help="Output file format (txt or csv)")
-    parser.add_argument("--headers", help="Custom headers in JSON format (e.g., '{\"Authorization\": \"Bearer token\"}')")
-    parser.add_argument("--proxy", help="Proxy URL (e.g., 'http://127.0.0.1:8080')")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose mode for detailed output")
-    parser.add_argument("--test-values", help="Custom test values in JSON format (e.g., '[1, 2, 3, 4, 5]')")
-    parser.add_argument("--sensitive-keywords", help="Custom sensitive keywords in JSON format (e.g., '[\"password\", \"email\"]')")
+    parser.add_argument("--headers", help="Custom headers in JSON format")
+    parser.add_argument("--proxy", help="Proxy URL")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose mode")
+    parser.add_argument("--test-values", help="Custom test values in JSON format")
+    parser.add_argument("--sensitive-keywords", help="Custom sensitive keywords in JSON format")
     parser.add_argument("--interactive", action="store_true", help="Launch interactive GUI mode")
     args = parser.parse_args()
 
@@ -311,10 +351,7 @@ def main():
     # Parse proxy configuration
     proxy = None
     if args.proxy:
-        proxy = {
-            "http": args.proxy,
-            "https": args.proxy,
-        }
+        proxy = {"http": args.proxy, "https": args.proxy}
 
     # Parse custom test values
     test_values = [1, 2, 3, 4, 5]  # Default test values
@@ -329,7 +366,7 @@ def main():
     sensitive_keywords = None
     if args.sensitive_keywords:
         try:
-            sensitive_keywords = json.loads(args.sensitive_keywords)  # Convert JSON string to list
+            sensitive_keywords = json.loads(args.sensitive_keywords)
         except json.JSONDecodeError as e:
             print(f"Error parsing sensitive keywords: {e}")
             return
@@ -351,7 +388,7 @@ def main():
             checker.check_idor(param, test_values, method=args.method, output_file=args.output, output_format=args.output_format)
     else:
         # If -p is not used, test a single parameter (e.g., 'id')
-        param_to_test = "id"  # Default parameter to test
+        param_to_test = "id"
         checker.check_idor(param_to_test, test_values, method=args.method, output_file=args.output, output_format=args.output_format)
 
 if __name__ == "__main__":
