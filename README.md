@@ -143,6 +143,16 @@ Response Content: {"error": "Forbidden"}...
 ----------------------------------------
 ```
 
+Scan Summary:
+```
+Scan Summary:
+Total Payloads Tested: 10
+Vulnerabilities Found: 2
+Vulnerable Payloads:
+- {'id': 1, 'random_str': 'aBcDeFgHiJ'}
+- {'id': 3, 'sql_injection': "' OR '1'='1"}
+```
+
 File Output (results.csv):
 ```
 Payload,Status Code,Response Content,Sensitive Data Detected
