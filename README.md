@@ -95,6 +95,9 @@ Advanced Usage
 ```
 python IDOR-Forge.py -u "https://example.com/api/resource?id=1" -p -m GET --proxy "http://127.0.0.1:8080" -v -o results.csv --output-format csv
 ```
+```
+python IDOR-Forge.py -u http://example.com/resource?id=1 -p -m GET --output results.csv --output-format csv --test-values [100,200,300] --sensitive-keywords ["password", "email"]
+```
 Options
 - -u, --url: Target URL to test for IDOR vulnerabilities.
 
@@ -126,6 +129,51 @@ python idor_hunter.py --interactive
 ```
 ![Screen Shot](./IMG/Screenshot_20250124_180049.png)
 
+The GUI allows you to input:
+
+- Target URL
+- Test values (comma-separated values to test)
+- Output file location
+- Start/Stop scanning
+- Progress indicator
+- Live results display
+
+## Example of Running the GUI:
+
+- URL: http://example.com/resource?id=1
+- Test Values: 1,2,3,4,5
+- Output File: results.json
+Click "Run Scan" to start testing. You can also stop the scan at any time using the "Stop Scan" button.
+
+## Advanced Features 🥷🏼
+
+Payload Types:
+The following advanced payloads are used to test various attack vectors:
+
+- Random String
+- Random Number
+- Special Characters
+- UUID
+- Base64 Encoding
+- SQL Injection
+- XSS (Cross-Site Scripting)
+- File Path Traversal
+- Command Injection
+- LDAP Injection
+- Buffer Overflow
+- And more...
+  
+Detecting Sensitive Data:
+The tool checks for the presence of sensitive data, including:
+
+- Passwords
+- Tokens
+- SSNs
+- Credit Card Numbers
+- Email addresses
+
+Rate Limiting Detection:
+If rate limiting is detected (e.g., HTTP status code 429), the tool automatically adjusts the request delay to avoid further blocking.
 
 ## Output Example 📄
 
