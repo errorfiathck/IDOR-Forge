@@ -173,6 +173,7 @@ The tool checks for the presence of sensitive data, including:
 - Email addresses
 
 Rate Limiting Detection:
+
 If rate limiting is detected (e.g., HTTP status code 429), the tool automatically adjusts the request delay to avoid further blocking.
 
 ## Output Example 📄
