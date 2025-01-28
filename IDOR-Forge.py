@@ -92,6 +92,8 @@ class IDORChecker:
             payloads.append({**new_params, "base64": base64.b64encode(value_str.encode()).decode()})  # Base64 encoded
             payloads.append({**new_params, "sql_injection": "' OR '1'='1"})  # SQL injection payload
             payloads.append({**new_params, "xss": "<script>alert('XSS')</script>"})  # XSS payload
+            payloads.append({**new_params, "json": json.dumps({"key": value_str})})  # JSON payload
+            payloads.append({**new_params, "xml": f"<root><value>{value_str}</value></root>"})  # XML payload
         return payloads
 
 
@@ -104,6 +106,7 @@ class IDORChecker:
     def _send_request(self, params: Dict, method: str = "GET") -> Optional[requests.Response]:
         """
         Send a request with the given parameters and HTTP method.
+        Implements exponential backoff for retries.
         """
         retries = 0
         while retries < self.max_retries:
@@ -126,8 +129,9 @@ class IDORChecker:
                 return response
             except requests.RequestException as e:
                 retries += 1
+                delay = self.delay * (2 ** retries)  # Exponential backoff
                 print(f"{Fore.YELLOW}Request failed (Attempt {retries}/{self.max_retries}): {e}{Style.RESET_ALL}")
-                time.sleep(self.delay * retries)  # Increase delay with each retry
+                time.sleep(delay)
         return None
 
     def _detect_sensitive_data(self, response_text: str) -> bool:
@@ -190,6 +194,7 @@ class IDORChecker:
         method: str = "GET",
         output_file: Optional[str] = None,
         output_format: str = "txt",
+        output_text: Optional[Text] = None,
     ):
         """
         Check for IDOR vulnerabilities by testing different values for the specified parameter.
@@ -210,12 +215,21 @@ class IDORChecker:
         if output_file:
             if output_format == "csv":
                 self._save_results_csv(results, output_file)
+            elif output_format == "json":
+                self._save_results_json(results, output_file)
             else:
                 self._save_results_txt(results, output_file)
             print(f"{Fore.GREEN}Results saved to {output_file}{Style.RESET_ALL}")
 
         # Display summary
         self._display_summary(results)
+
+    def _save_results_json(self, results: List[Dict], output_file: str):
+        """
+        Save results to a JSON file.
+        """
+        with open(output_file, "w") as f:
+           json.dump(results, f, indent=4)
 
     def _save_results_txt(self, results: List[Dict], output_file: str):
         """
@@ -267,6 +281,14 @@ def interactive_mode():
     root = Tk()
     root.title("IDOR Vulnerability Scanner")
 
+    # Add a stop flag
+    stop_flag = False
+
+    def stop_scan():
+        nonlocal stop_flag
+        stop_flag = True
+        messagebox.showinfo("Info", "Scan stopped by user.")
+
     Label(root, text="Target URL:").grid(row=0, column=0, padx=10, pady=10)
     url_entry = Entry(root, width=50)
     url_entry.grid(row=0, column=1, padx=10, pady=10)
@@ -289,6 +311,8 @@ def interactive_mode():
     progress.grid(row=4, column=0, columnspan=2, pady=10)
 
     def run_scan():
+        nonlocal stop_flag
+        stop_flag = False
         url = url_entry.get()
         test_values = test_values_entry.get().split(",")
         output_file = output_file_entry.get()
@@ -306,27 +330,34 @@ def interactive_mode():
         progress["value"] = 0
 
         for param in checker.params.keys():
+            if stop_flag:
+                output_text.insert(END, "Scan stopped by user.\n")
+                break
             output_text.insert(END, f"Scanning parameter: {param}\n")
-            checker.check_idor(param, test_values, output_file=output_file, output_text=output_text)
+            checker.check_idor(param, test_values, method="GET", output_file=output_file, output_text=output_text)
             progress["value"] += len(test_values)
             root.update_idletasks()
 
         output_text.insert(END, "Scan complete!\n")
 
     Button(root, text="Run Scan", command=run_scan).grid(row=5, column=0, columnspan=2, pady=10)
+    Button(root, text="Stop Scan", command=stop_scan).grid(row=6, column=0, columnspan=2, pady=10)
 
     root.mainloop()
 
 def main():
     banner()
     # Set up argument parser
-    parser = argparse.ArgumentParser(description="Ultimate IDOR Vulnerability Checker")
+    parser = argparse.ArgumentParser(
+        description="Ultimate IDOR Vulnerability Checker",
+        epilog="Example: \npython IDOR-Forge.py -u 'https://example.com/profile?id=1' -p -m GET -d 0.5 -o results.txt --output-format txt --verbose\n"
+    )
     parser.add_argument("-u", "--url", help="Target URL to test for IDOR vulnerabilities")
     parser.add_argument("-p", "--parameters", action="store_true", help="Scan all parameters in the URL")
     parser.add_argument("-m", "--method", default="GET", help="HTTP method to use (GET, POST, PUT, DELETE)")
     parser.add_argument("-d", "--delay", type=float, default=1, help="Delay between requests (in seconds)")
     parser.add_argument("-o", "--output", help="Output file to save results")
-    parser.add_argument("--output-format", choices=["txt", "csv"], default="txt", help="Output file format (txt or csv)")
+    parser.add_argument("--output-format", choices=["txt", "csv", "json"], default="txt", help="Output file format (txt, csv, or json)")
     parser.add_argument("--headers", help="Custom headers in JSON format")
     parser.add_argument("--proxy", help="Proxy URL")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose mode")
