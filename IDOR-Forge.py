@@ -69,31 +69,51 @@ class IDORChecker:
             print(f"{Fore.RED}Error parsing URL: {e}{Style.RESET_ALL}")
             raise
 
+    def _load_payloads_from_file(self, filename: str) -> List[str]:
+        """
+        Load payloads from a file, each line representing a separate payload.
+        """
+        try:
+            with open(filename, "r", encoding="utf-8") as file:
+                return [line.strip() for line in file.readlines() if line.strip()]
+        except FileNotFoundError:
+            print(f"{Fore.RED}Warning: Payload file {filename} not found. Using default values.{Style.RESET_ALL}")
+            return []
+
     def _generate_payloads(self, param: str, values: List[str]) -> List[Dict]:
         """
         Generate dynamic payloads by replacing the specified parameter with the given values.
-        Includes advanced payloads like random strings, numbers, special characters, UUIDs, and encoded values.
+        Includes SQL injection, XSS, and XML payloads from external files.
         """
+        sql_payloads = self._load_payloads_from_file("core/sql.txt")
+        xss_payloads = self._load_payloads_from_file("core/xss.txt")
+        xml_payloads = self._load_payloads_from_file("core/xml.txt")
+
         payloads = []
         for value in values:
-            # Convert value to string if it's not already
             value_str = str(value)
-
-            # Basic payload
             new_params = self.params.copy()
             new_params[param] = value_str
             payloads.append(new_params)
 
-            # Advanced payloads
-            payloads.append({**new_params, "random_str": self._generate_random_string(10)})  # Random string
-            payloads.append({**new_params, "random_num": random.randint(1000, 9999)})  # Random number
-            payloads.append({**new_params, "special_chars": "!@#$%^&*()"})  # Special characters
-            payloads.append({**new_params, "uuid": str(uuid.uuid4())})  # UUID
-            payloads.append({**new_params, "base64": base64.b64encode(value_str.encode()).decode()})  # Base64 encoded
-            payloads.append({**new_params, "sql_injection": "' OR '1'='1"})  # SQL injection payload
-            payloads.append({**new_params, "xss": "<script>alert('XSS')</script>"})  # XSS payload
-            payloads.append({**new_params, "json": json.dumps({"key": value_str})})  # JSON payload
-            payloads.append({**new_params, "xml": f"<root><value>{value_str}</value></root>"})  # XML payload
+            # Dynamic Payloads
+            payloads.append({**new_params, "random_str": self._generate_random_string(10)})
+            payloads.append({**new_params, "random_num": random.randint(1000, 9999)})
+            payloads.append({**new_params, "special_chars": "!@#$%^&*()"})
+            payloads.append({**new_params, "uuid": str(uuid.uuid4())})
+            payloads.append({**new_params, "base64": base64.b64encode(value_str.encode()).decode()})
+            payloads.append({**new_params, "json": json.dumps({"key": value_str})})
+
+            # Load SQL Injection, XSS, and XML payloads from files
+            for sql in sql_payloads:
+                payloads.append({**new_params, "sql_injection": sql})
+
+            for xss in xss_payloads:
+                payloads.append({**new_params, "xss": xss})
+
+            for xml in xml_payloads:
+                payloads.append({**new_params, "xml": xml})
+
         return payloads
 
 
