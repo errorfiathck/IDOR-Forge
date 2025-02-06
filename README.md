@@ -127,7 +127,7 @@ Options
 ```
 python idor_hunter.py --interactive
 ```
-![Screen Shot](./IMG/Screenshot_20250124_180049.png)
+![Screen Shot](./IMG/interactive.png)
 
 The GUI allows you to input:
 
