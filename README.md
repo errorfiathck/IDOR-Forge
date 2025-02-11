@@ -125,7 +125,7 @@ Options
 
 ## Interactive GUI Mode
 ```
-python idor_hunter.py --interactive
+python IDOR-Forge.py --interactive
 ```
 ![Screen Shot](./IMG/interactive.png)
 
