@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 import random
 import string
 import uuid
+from threading import Lock
 import base64
 from colorama import Fore, Style, init
 
@@ -55,6 +56,7 @@ class IDORChecker:
         self.max_retries = max_retries
         self.payload_history = []
         self.logger = logger if logger else print  # Use logger if provided, otherwise default to print
+        self.payload_history_lock = Lock()  # Thread-safe lock for payload history
 
 
     def _parse_url(self, url: str) -> tuple:
@@ -88,18 +90,24 @@ class IDORChecker:
         Generate dynamic payloads by replacing the specified parameter with the given values.
         Includes SQL injection, XSS, and XML payloads from external files.
         """
-        sql_payloads = self._load_payloads_from_file("core/sql.txt")
-        xss_payloads = self._load_payloads_from_file("core/xss.txt")
-        xml_payloads = self._load_payloads_from_file("core/xml.txt")
+        # Cache payloads from files
+        if not hasattr(self, "_payload_cache"):
+            self._payload_cache = {
+                "sql": self._load_payloads_from_file("core/sql.txt"),
+                "xss": self._load_payloads_from_file("core/xss.txt"),
+                "xml": self._load_payloads_from_file("core/xml.txt"),
+            }
 
         payloads = []
         for value in values:
             value_str = str(value)
             new_params = self.params.copy()
             new_params[param] = value_str
+
+            # Base payload
             payloads.append(new_params)
 
-            # Dynamic Payloads
+            # Dynamic payloads
             payloads.append({**new_params, "random_str": self._generate_random_string(10)})
             payloads.append({**new_params, "random_num": random.randint(1000, 9999)})
             payloads.append({**new_params, "special_chars": "!@#$%^&*()"})
@@ -107,14 +115,14 @@ class IDORChecker:
             payloads.append({**new_params, "base64": base64.b64encode(value_str.encode()).decode()})
             payloads.append({**new_params, "json": json.dumps({"key": value_str})})
 
-            # Load SQL Injection, XSS, and XML payloads from files
-            for sql in sql_payloads:
+            # Add SQL Injection, XSS, and XML payloads
+            for sql in self._payload_cache["sql"]:
                 payloads.append({**new_params, "sql_injection": sql})
 
-            for xss in xss_payloads:
+            for xss in self._payload_cache["xss"]:
                 payloads.append({**new_params, "xss": xss})
 
-            for xml in xml_payloads:
+            for xml in self._payload_cache["xml"]:
                 payloads.append({**new_params, "xml": xml})
 
         return payloads
@@ -127,6 +135,10 @@ class IDORChecker:
         return "".join(random.choices(string.ascii_letters + string.digits, k=length))
 
     def _send_request(self, params: Dict, method: str = "GET") -> Optional[requests.Response]:
+        """
+        Send a request with the given parameters and HTTP method.
+        Implements exponential backoff for retries.
+        """
         retries = 0
         while retries < self.max_retries:
             try:
@@ -148,8 +160,8 @@ class IDORChecker:
                 return response
             except requests.RequestException as e:
                 retries += 1
-                delay = self.delay * (2 ** retries)
-                self.logger(f"{Fore.YELLOW}Request failed (Attempt {retries}/{self.max_retries}): {e}{Style.RESET_ALL}")
+                delay = self.delay * (2 ** retries)  # Exponential backoff
+                print(f"{Fore.YELLOW}Request failed (Attempt {retries}/{self.max_retries}): {e}{Style.RESET_ALL}")
                 time.sleep(delay)
         return None
 
@@ -173,31 +185,40 @@ class IDORChecker:
         return False
 
     def _test_payload(self, payload: Dict, method: str) -> Dict:
+        """
+        Test a single payload and return the result.
+        """
         if self.verbose:
-            self.logger(f"{Fore.CYAN}Testing payload: {payload}{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}Testing payload: {payload}{Style.RESET_ALL}")
         response = self._send_request(payload, method)
         if response is None:
             return {}
 
+        # Detect rate limiting
         if self._detect_rate_limiting(response):
             self.rate_limit_detected = True
-            self.logger(f"{Fore.YELLOW}Rate limiting detected. Adjusting delay...{Style.RESET_ALL}")
-            time.sleep(self.delay * 2)
+            print(f"{Fore.YELLOW}Rate limiting detected. Adjusting delay...{Style.RESET_ALL}")
+            time.sleep(self.delay * 2)  # Increase delay to avoid further rate limiting
 
         result = {
             "payload": payload,
             "status_code": response.status_code,
-            "response_content": response.text[:200],
+            "response_content": response.text[:200],  # Save first 200 chars of response
             "sensitive_data_detected": self._detect_sensitive_data(response.text),
         }
 
-        if self.verbose:
-            self.logger(f"{Fore.GREEN}Status Code: {result['status_code']}{Style.RESET_ALL}")
-            self.logger(f"{Fore.GREEN}Response Content: {result['response_content']}...{Style.RESET_ALL}")
-            if result["sensitive_data_detected"]:
-                self.logger(f"{Fore.RED}Sensitive data detected!{Style.RESET_ALL}")
-            self.logger("-" * 40)
+        # Thread-safe addition to payload history
+        with self.payload_history_lock:
+            self.payload_history.append(result)
 
+        if self.verbose:
+            print(f"{Fore.GREEN}Status Code: {result['status_code']}{Style.RESET_ALL}")
+            print(f"{Fore.GREEN}Response Content: {result['response_content']}...{Style.RESET_ALL}")
+            if result["sensitive_data_detected"]:
+                print(f"{Fore.RED}Sensitive data detected!{Style.RESET_ALL}")
+            print("-" * 40)
+
+        # Delay between requests to avoid rate limiting
         time.sleep(self.delay)
         return result
 
@@ -208,7 +229,7 @@ class IDORChecker:
         method: str = "GET",
         output_file: Optional[str] = None,
         output_format: str = "txt",
-        output_text: Optional[Text] = None,
+        max_workers: int = 5,  # Configurable number of threads
     ):
         """
         Check for IDOR vulnerabilities by testing different values for the specified parameter.
@@ -216,8 +237,8 @@ class IDORChecker:
         payloads = self._generate_payloads(param, test_values)
         results = []
 
-        # Use threading for concurrent scanning
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        # Use ThreadPoolExecutor with configurable max_workers
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(self._test_payload, payload, method) for payload in payloads]
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
@@ -238,8 +259,7 @@ class IDORChecker:
         # Display summary
         self._display_summary(results)
 
-        # Return the results
-        return results  # Explicitly return the results
+        return results
 
     def _save_results_json(self, results: List[Dict], output_file: str):
         """
