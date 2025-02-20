@@ -3,12 +3,8 @@ from core.IDORChecker import IDORChecker
 import threading
 
 def interactive_mode():
-    """
-    Launch an interactive GUI for IDOR testing.
-    """
     root = Tk()
     root.title("IDOR Vulnerability Scanner")
-
     stop_flag = False
 
     def stop_scan():
@@ -28,7 +24,6 @@ def interactive_mode():
     output_file_entry = Entry(root, width=50)
     output_file_entry.grid(row=2, column=1, padx=10, pady=10)
 
-    # Checkboxes for additional attack types
     Label(root, text="Select Payload Types:").grid(row=3, column=0, padx=10, pady=10, sticky="w")
 
     sql_var = BooleanVar()
@@ -42,6 +37,7 @@ def interactive_mode():
 
     output_text = Text(root, height=20, width=80)
     output_text.grid(row=7, column=0, columnspan=2, padx=10, pady=10)
+
     scrollbar = Scrollbar(root, command=output_text.yview)
     scrollbar.grid(row=7, column=2, sticky="ns")
     output_text.config(yscrollcommand=scrollbar.set)
@@ -50,45 +46,36 @@ def interactive_mode():
     progress.grid(row=8, column=0, columnspan=2, pady=10)
 
     def log_message(message):
-        """ Append a message to the output text area in the GUI. """
         output_text.insert(END, message + "\n")
-        output_text.yview(END)  # Auto-scroll to the latest message
+        output_text.yview(END)
         root.update_idletasks()
 
     def get_selected_payloads(checker, param, values):
-        """
-        Filters payloads based on user selection while always including core payloads.
-        """
         all_payloads = checker._generate_payloads(param, values)
         selected_payloads = []
-
         for payload in all_payloads:
             if any(key in payload for key in ["random_str", "random_num", "base64", "special_chars", "uuid", "json"]):
-                selected_payloads.append(payload)  # Always keep core payloads
-
-            # Add selected attack payloads
+                selected_payloads.append(payload)
             if sql_var.get() and "sql_injection" in payload:
                 selected_payloads.append(payload)
             if xss_var.get() and "xss" in payload:
                 selected_payloads.append(payload)
             if xml_var.get() and "xml" in payload:
                 selected_payloads.append(payload)
-
-        return selected_payloads if selected_payloads else all_payloads  # Default to all if none selected
+        return selected_payloads if selected_payloads else all_payloads
 
     def run_scan():
         nonlocal stop_flag
         stop_flag = False
         url = url_entry.get()
-        test_values = test_values_entry.get().split(",")
+        test_values = [value.strip() for value in test_values_entry.get().split(",") if value.strip()]
         output_file = output_file_entry.get()
 
         if not url or not test_values:
             messagebox.showerror("Error", "Please provide a URL and test values.")
             return
 
-        checker = IDORChecker(url, verbose=True)
-
+        checker = IDORChecker(url, verbose=True, logger=log_message)  # Pass log_message as logger
         log_message(f"Scanning URL: {url}")
         log_message(f"Test Values: {test_values}")
         log_message("-" * 40)
@@ -102,16 +89,16 @@ def interactive_mode():
                 break
 
             log_message(f"Scanning parameter: {param}")
-
-            # Get payloads based on user selection
             selected_payloads = get_selected_payloads(checker, param, test_values)
 
             # Run scan and collect results
             results = checker.check_idor(param, selected_payloads, method="GET")
+            if results is None:  # Handle case where results might still be None
+                results = []
 
             # Display results in GUI
             for result in results:
-                log_message(result)
+                log_message(f"Payload: {result['payload']}, Status Code: {result['status_code']}, Sensitive Data Detected: {result['sensitive_data_detected']}")
 
             progress["value"] += len(selected_payloads)
             root.update_idletasks()
