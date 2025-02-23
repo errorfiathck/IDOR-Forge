@@ -1,111 +1,257 @@
-from tkinter import Tk, Label, Entry, Button, Text, Scrollbar, END, messagebox, ttk, BooleanVar, Checkbutton
+import sys
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QLineEdit, QPushButton, QTextEdit, QCheckBox, QProgressBar, QMessageBox,
+    QFileDialog, QComboBox, QMenuBar, QAction, QMenu
+)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from core.IDORChecker import IDORChecker
-import threading
 
-def interactive_mode():
-    root = Tk()
-    root.title("IDOR Vulnerability Scanner")
-    stop_flag = False
+class ScanWorker(QThread):
+    """Worker thread for running the scan in the background."""
+    log_message = pyqtSignal(str)  # Signal for logging messages
+    progress_update = pyqtSignal(int)  # Signal for updating progress
+    finished = pyqtSignal()  # Signal when the scan is complete
 
-    def stop_scan():
-        nonlocal stop_flag
-        stop_flag = True
-        messagebox.showinfo("Info", "Scan stopped by user.")
+    def __init__(self, url, test_values, output_file, payload_types, method="GET"):
+        super().__init__()
+        self.url = url
+        self.test_values = test_values
+        self.output_file = output_file
+        self.payload_types = payload_types
+        self.method = method
+        self.stop_flag = False
 
-    Label(root, text="Target URL:").grid(row=0, column=0, padx=10, pady=10)
-    url_entry = Entry(root, width=50)
-    url_entry.grid(row=0, column=1, padx=10, pady=10)
+    def stop(self):
+        """Set the stop flag to terminate the scan."""
+        self.stop_flag = True
 
-    Label(root, text="Test Values (comma-separated):").grid(row=1, column=0, padx=10, pady=10)
-    test_values_entry = Entry(root, width=50)
-    test_values_entry.grid(row=1, column=1, padx=10, pady=10)
+    def run(self):
+        """Run the IDOR vulnerability scan."""
+        try:
+            checker = IDORChecker(self.url, verbose=True, logger=self.log_message.emit)
 
-    Label(root, text="Output File:").grid(row=2, column=0, padx=10, pady=10)
-    output_file_entry = Entry(root, width=50)
-    output_file_entry.grid(row=2, column=1, padx=10, pady=10)
+            # Generate payloads based on selected types
+            all_payloads = checker._generate_payloads("id", self.test_values)
+            selected_payloads = []
+            for payload in all_payloads:
+                if any(key in payload for key in ["random_str", "random_num", "base64", "special_chars", "uuid", "json"]):
+                    selected_payloads.append(payload)
+                if "sql" in self.payload_types and "sql_injection" in payload:
+                    selected_payloads.append(payload)
+                if "xss" in self.payload_types and "xss" in payload:
+                    selected_payloads.append(payload)
+                if "xml" in self.payload_types and "xml" in payload:
+                    selected_payloads.append(payload)
 
-    Label(root, text="Select Payload Types:").grid(row=3, column=0, padx=10, pady=10, sticky="w")
+            # Run the scan
+            total_payloads = len(selected_payloads)
+            results = []
+            for i, payload in enumerate(selected_payloads):
+                if self.stop_flag:
+                    self.log_message.emit("Scan stopped by user.")
+                    break
+                self.log_message.emit(f"Testing payload: {payload}")
+                result = checker._test_payload(payload, self.method)
+                results.append(result)
+                self.progress_update.emit(int((i + 1) * 100 / total_payloads))
 
-    sql_var = BooleanVar()
-    Checkbutton(root, text="SQL Injection", variable=sql_var).grid(row=4, column=0, padx=10, pady=2, sticky="w")
+            # Save results to file if specified
+            if self.output_file:
+                checker._save_results_json(results, self.output_file)
+                self.log_message.emit(f"Results saved to {self.output_file}")
 
-    xss_var = BooleanVar()
-    Checkbutton(root, text="XSS (Cross-site Scripting)", variable=xss_var).grid(row=5, column=0, padx=10, pady=2, sticky="w")
+            self.log_message.emit("Scan complete!")
+        except Exception as e:
+            self.log_message.emit(f"Error during scan: {e}")
+        finally:
+            self.finished.emit()
 
-    xml_var = BooleanVar()
-    Checkbutton(root, text="XML Injection", variable=xml_var).grid(row=6, column=0, padx=10, pady=2, sticky="w")
+class IDORScannerGUI(QMainWindow):
+    """Main GUI window for the IDOR Vulnerability Scanner."""
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("IDOR Vulnerability Scanner")
+        self.setGeometry(100, 100, 800, 600)
 
-    output_text = Text(root, height=20, width=80)
-    output_text.grid(row=7, column=0, columnspan=2, padx=10, pady=10)
+        # Central widget and layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QVBoxLayout()
+        central_widget.setLayout(layout)
 
-    scrollbar = Scrollbar(root, command=output_text.yview)
-    scrollbar.grid(row=7, column=2, sticky="ns")
-    output_text.config(yscrollcommand=scrollbar.set)
+        # Add Menu Bar
+        self.menu_bar = self.menuBar()
 
-    progress = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate")
-    progress.grid(row=8, column=0, columnspan=2, pady=10)
+        # File Menu
+        file_menu = self.menu_bar.addMenu("File")
+        save_action = QAction("Save Results", self)
+        save_action.triggered.connect(self.select_output_file)
+        exit_action = QAction("Exit", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(save_action)
+        file_menu.addAction(exit_action)
 
-    def log_message(message):
-        output_text.insert(END, message + "\n")
-        output_text.yview(END)
-        root.update_idletasks()
+        # View Menu
+        view_menu = self.menu_bar.addMenu("View")
+        clear_log_action = QAction("Clear Log", self)
+        clear_log_action.triggered.connect(self.clear_log)
+        view_menu.addAction(clear_log_action)
 
-    def get_selected_payloads(checker, param, values):
-        all_payloads = checker._generate_payloads(param, values)
-        selected_payloads = []
-        for payload in all_payloads:
-            if any(key in payload for key in ["random_str", "random_num", "base64", "special_chars", "uuid", "json"]):
-                selected_payloads.append(payload)
-            if sql_var.get() and "sql_injection" in payload:
-                selected_payloads.append(payload)
-            if xss_var.get() and "xss" in payload:
-                selected_payloads.append(payload)
-            if xml_var.get() and "xml" in payload:
-                selected_payloads.append(payload)
-        return selected_payloads if selected_payloads else all_payloads
+        # Edit Menu
+        edit_menu = self.menu_bar.addMenu("Edit")
+        preferences_action = QAction("Preferences", self)
+        preferences_action.triggered.connect(self.show_preferences)
+        edit_menu.addAction(preferences_action)
 
-    def run_scan():
-        nonlocal stop_flag
-        stop_flag = False
-        url = url_entry.get()
-        test_values = [value.strip() for value in test_values_entry.get().split(",") if value.strip()]
-        output_file = output_file_entry.get()
+        # Help Menu
+        help_menu = self.menu_bar.addMenu("Help")
+        about_action = QAction("About", self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+
+        # Input fields
+        input_layout = QHBoxLayout()
+        layout.addLayout(input_layout)
+
+        # URL input
+        self.url_label = QLabel("Target URL:")
+        self.url_input = QLineEdit()
+        input_layout.addWidget(self.url_label)
+        input_layout.addWidget(self.url_input)
+
+        # Test values input
+        test_values_layout = QHBoxLayout()
+        layout.addLayout(test_values_layout)
+        self.test_values_label = QLabel("Test Values (comma-separated):")
+        self.test_values_input = QLineEdit()
+        test_values_layout.addWidget(self.test_values_label)
+        test_values_layout.addWidget(self.test_values_input)
+
+        # Output file input
+        output_layout = QHBoxLayout()
+        layout.addLayout(output_layout)
+        self.output_label = QLabel("Output File:")
+        self.output_input = QLineEdit()
+        self.browse_button = QPushButton("Browse")
+        self.browse_button.clicked.connect(self.select_output_file)
+        output_layout.addWidget(self.output_label)
+        output_layout.addWidget(self.output_input)
+        output_layout.addWidget(self.browse_button)
+
+        # Payload types selection
+        payload_layout = QVBoxLayout()
+        layout.addLayout(payload_layout)
+        self.payload_label = QLabel("Select Payload Types:")
+        self.sql_check = QCheckBox("SQL Injection")
+        self.xss_check = QCheckBox("XSS (Cross-site Scripting)")
+        self.xml_check = QCheckBox("XML Injection")
+        payload_layout.addWidget(self.payload_label)
+        payload_layout.addWidget(self.sql_check)
+        payload_layout.addWidget(self.xss_check)
+        payload_layout.addWidget(self.xml_check)
+
+        # HTTP method selection
+        method_layout = QHBoxLayout()
+        layout.addLayout(method_layout)
+        self.method_label = QLabel("HTTP Method:")
+        self.method_combo = QComboBox()
+        self.method_combo.addItems(["GET", "POST", "PUT", "DELETE"])
+        method_layout.addWidget(self.method_label)
+        method_layout.addWidget(self.method_combo)
+
+        # Log area
+        self.log_area = QTextEdit()
+        self.log_area.setReadOnly(True)
+        layout.addWidget(self.log_area)
+
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        layout.addWidget(self.progress_bar)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        layout.addLayout(button_layout)
+        self.run_button = QPushButton("Run Scan")
+        self.run_button.clicked.connect(self.start_scan)
+        self.stop_button = QPushButton("Stop Scan")
+        self.stop_button.clicked.connect(self.stop_scan)
+        self.stop_button.setEnabled(False)
+        button_layout.addWidget(self.run_button)
+        button_layout.addWidget(self.stop_button)
+
+        # Worker thread
+        self.worker = None
+
+    def select_output_file(self):
+        """Open file dialog to select an output file."""
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Output File", "", "JSON Files (*.json);;All Files (*)", options=options)
+        if file_name:
+            self.output_input.setText(file_name)
+
+    def start_scan(self):
+        """Start the scan process."""
+        url = self.url_input.text().strip()
+        test_values = [value.strip() for value in self.test_values_input.text().split(",") if value.strip()]
+        output_file = self.output_input.text().strip()
+        payload_types = []
+        if self.sql_check.isChecked():
+            payload_types.append("sql")
+        if self.xss_check.isChecked():
+            payload_types.append("xss")
+        if self.xml_check.isChecked():
+            payload_types.append("xml")
+        method = self.method_combo.currentText()
 
         if not url or not test_values:
-            messagebox.showerror("Error", "Please provide a URL and test values.")
+            QMessageBox.critical(self, "Error", "Please provide a URL and test values.")
             return
 
-        checker = IDORChecker(url, verbose=True, logger=log_message)  # Pass log_message as logger
-        log_message(f"Scanning URL: {url}")
-        log_message(f"Test Values: {test_values}")
-        log_message("-" * 40)
+        self.run_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+        self.worker = ScanWorker(url, test_values, output_file, payload_types, method=method)
+        self.worker.log_message.connect(self.update_log)
+        self.worker.progress_update.connect(self.update_progress)
+        self.worker.finished.connect(self.scan_finished)
+        self.worker.start()
 
-        progress["maximum"] = len(checker.params.keys()) * len(test_values)
-        progress["value"] = 0
+    def stop_scan(self):
+        """Stop the scan process."""
+        if self.worker:
+            self.worker.stop()
+            self.worker.wait()  # Wait for the thread to finish
+        self.run_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
 
-        for param in checker.params.keys():
-            if stop_flag:
-                log_message("Scan stopped by user.")
-                break
+    def update_log(self, message):
+        """Update the log area with a new message."""
+        self.log_area.append(message)
 
-            log_message(f"Scanning parameter: {param}")
-            selected_payloads = get_selected_payloads(checker, param, test_values)
+    def update_progress(self, value):
+        """Update the progress bar value."""
+        self.progress_bar.setValue(value)
 
-            # Run scan and collect results
-            results = checker.check_idor(param, selected_payloads, method="GET")
-            if results is None:  # Handle case where results might still be None
-                results = []
+    def scan_finished(self):
+        """Handle actions when the scan is finished."""
+        self.run_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        QMessageBox.information(self, "Info", "Scan completed.")
 
-            # Display results in GUI
-            for result in results:
-                log_message(f"Payload: {result['payload']}, Status Code: {result['status_code']}, Sensitive Data Detected: {result['sensitive_data_detected']}")
+    def clear_log(self):
+        """Clear the log area."""
+        self.log_area.clear()
 
-            progress["value"] += len(selected_payloads)
-            root.update_idletasks()
+    def show_preferences(self):
+        """Show preferences dialog (placeholder)."""
+        QMessageBox.information(self, "Preferences", "Preferences dialog will be implemented soon.")
 
-        log_message("Scan complete!")
+    def show_about(self):
+        """Show about dialog."""
+        QMessageBox.about(self, "About IDOR-Forge", "IDOR Vulnerability Scanner v1.3\nDeveloped by errorfiat\n\nIt`s an advanced and versatile tool designed to detect Insecure Direct Object Reference (IDOR) vulnerabilities in web applications.")
 
-    Button(root, text="Run Scan", command=lambda: threading.Thread(target=run_scan, daemon=True).start()).grid(row=9, column=0, columnspan=2, pady=10)
-    Button(root, text="Stop Scan", command=stop_scan).grid(row=10, column=0, columnspan=2, pady=10)
-
-    root.mainloop()
+def interactive_mode():
+    app = QApplication(sys.argv)
+    window = IDORScannerGUI()
+    window.show()
+    sys.exit(app.exec_())
