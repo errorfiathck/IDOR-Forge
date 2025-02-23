@@ -127,7 +127,7 @@ Options
 ```
 python IDOR-Forge.py --interactive
 ```
-![Screen Shot](./IMG/interactive_V-1.2.png)
+![Screen Shot](./IMG/interactive_V1.3.1.png)
 
 The GUI allows you to input:
 
