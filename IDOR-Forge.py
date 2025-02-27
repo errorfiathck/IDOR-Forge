@@ -6,8 +6,12 @@ from core.interactive import interactive_mode  # Import the GUI function
 
 def main():
     banner()
+    print("")
     
-    parser = argparse.ArgumentParser(description="Ultimate IDOR Vulnerability Checker")
+    parser = argparse.ArgumentParser(
+        description="Ultimate IDOR Vulnerability Checker",
+        prog="""npython IDOR-Forge.py -u "https://example.com/api/resource?id=1" -p -m GET --proxy "http://127.0.0.1:8080" -v -o results.csv --output-format csv\n       python IDOR-Forge.py -u http://example.com/resource?id=1 -p -m GET --output results.csv --output-format csv --test-values [100,200,300] --sensitive-keywords ["password", "email"]
+    """)
     parser.add_argument("-u", "--url", help="Target URL to test for IDOR vulnerabilities")
     parser.add_argument("-p", "--parameters", action="store_true", help="Scan all parameters in the URL")
     parser.add_argument("-m", "--method", default="GET", help="HTTP method to use (GET, POST, PUT, DELETE)")
@@ -20,7 +24,8 @@ def main():
     parser.add_argument("--test-values", help="Custom test values in JSON format")
     parser.add_argument("--sensitive-keywords", help="Custom sensitive keywords in JSON format")
     parser.add_argument("--interactive", action="store_true", help="Launch interactive GUI mode")
-    
+    parser.add_argument("-Rv", "--report-and-visualize", action="store_true", help="Enable reporting and visualization")
+
     args = parser.parse_args()
 
     if args.interactive:
@@ -71,14 +76,43 @@ def main():
 
     # If -p switch is used, scan all parameters in the URL
     if args.parameters:
+        results = []
         for param in checker.params.keys():
             print(f"Scanning parameter: {param}")
-            checker.check_idor(param, test_values, method=args.method, output_file=args.output, output_format=args.output_format)
+            results.extend(
+                checker.check_idor(
+                    param,
+                    test_values,
+                    method=args.method,
+                    output_file=args.output,
+                    output_format=args.output_format,
+                )
+            )
     else:
         # If -p is not used, test a single parameter (e.g., 'id')
         param_to_test = "id"
-        checker.check_idor(param_to_test, test_values, method=args.method, output_file=args.output, output_format=args.output_format)
+        results = checker.check_idor(
+            param_to_test,
+            test_values,
+            method=args.method,
+            output_file=args.output,
+            output_format=args.output_format,
+        )
 
-    
+    # Generate report and visualize results if -Rv is specified
+    if args.report_and_visualize:
+        if not results:
+            print(f"{Fore.YELLOW}No results to report or visualize.{Style.RESET_ALL}")
+            return
+
+        # Generate a detailed report
+        report_output = "idor_report.txt"  # Default report file name
+        checker.generate_report(results, report_output, format_type="txt")
+        print(f"{Fore.GREEN}Report generated: {report_output}{Style.RESET_ALL}")
+
+        # Visualize results
+        print(f"{Fore.CYAN}Generating visualizations...{Style.RESET_ALL}")
+        checker.visualize_results(results)
+
 if __name__ == "__main__":
     main()
