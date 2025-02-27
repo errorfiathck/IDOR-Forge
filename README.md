@@ -98,6 +98,9 @@ python IDOR-Forge.py -u "https://example.com/api/resource?id=1" -p -m GET --prox
 ```
 python IDOR-Forge.py -u http://example.com/resource?id=1 -p -m GET --output results.csv --output-format csv --test-values [100,200,300] --sensitive-keywords ["password", "email"]
 ```
+```
+python IDOR-Forge.py -u http://example.com/api/user?id=1 --parameters -m GET -d 2 -o results.json --output-format json --headers '{"Authorization": "Bearer token"}' --test-values '[1, 2, 3]' --sensitive-keywords '["password", "email"]' -v -Rv
+```
 Options
 - -u, --url: Target URL to test for IDOR vulnerabilities.
 
@@ -122,6 +125,8 @@ Options
 - --sensitive-keywords: Custom sensitive keywords in JSON format (e.g., '["password", "email"]').
 
 - --interactive: Launch interactive GUI mode.
+  
+- -Rv, --report-and-visualize: Enable reporting and visualization
 
 ## Interactive GUI Mode
 ```
@@ -201,13 +206,28 @@ Vulnerable Payloads:
 - {'id': 1, 'random_str': 'aBcDeFgHiJ'}
 - {'id': 3, 'sql_injection': "' OR '1'='1"}
 ```
-
+Table:
+```
++-------------------+-------------+---------------------------+
+|      Payload      | Status Code | Sensitive Data Detected   |
++-------------------+-------------+---------------------------+
+| {'id': '1'}       | 200         | True                      |
+| {'id': '2'}       | 404         | False                     |
+| {'id': '3'}       | 200         | False                     |
++-------------------+-------------+---------------------------+
+```
 File Output (results.csv):
 ```
 Payload,Status Code,Response Content,Sensitive Data Detected
 "{'id': 1}",200,"{"data": "sensitive_data"}",True
 "{'id': 2, 'random_str': 'aBcDeFgHiJ'}",403,"{"error": "Forbidden"}",False
 ```
+
+Pie Chart :
+
+![Screen Shot](./IMG/visualization.png)
+
+
 ## Contributing 🤝
 
 Contributions are welcome! Please follow these steps:
