@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+from tabulate import tabulate
 import argparse
 import requests
 from urllib.parse import urlparse, parse_qs
@@ -297,15 +299,66 @@ class IDORChecker:
                     ]
                 )
 
+    def generate_report(self, results: List[Dict], output_file: str, format_type: str = "txt"):
+        """
+        Generate a detailed report of the scan results in the specified format.
+        Supported formats: txt, csv, json.
+        """
+        if format_type == "json":
+            self._save_results_json(results, output_file)
+        elif format_type == "csv":
+            self._save_results_csv(results, output_file)
+        elif format_type == "txt":
+            self._save_results_txt(results, output_file)
+        else:
+            print(f"{Fore.RED}Unsupported format: {format_type}. Using default (txt).{Style.RESET_ALL}")
+            self._save_results_txt(results, output_file)
+
+        print(f"{Fore.GREEN}Report generated: {output_file}{Style.RESET_ALL}")
+
+    def visualize_results(self, results: List[Dict]):
+        """
+        Visualize the scan results using matplotlib.
+        """
+        # Count the number of vulnerable and non-vulnerable payloads
+        vulnerable_count = sum(1 for result in results if result["sensitive_data_detected"])
+        safe_count = len(results) - vulnerable_count
+
+        # Create a pie chart
+        labels = ["Vulnerable", "Safe"]
+        sizes = [vulnerable_count, safe_count]
+        colors = ["red", "green"]
+
+        plt.figure(figsize=(8, 6))
+        plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+        plt.title("IDOR Vulnerability Summary")
+        plt.axis('equal')  # Equal aspect ratio ensures the pie chart is circular.
+        plt.show()
+
+        # Create a table for detailed results
+        table_data = [
+            [result["payload"], result["status_code"], result["sensitive_data_detected"]]
+            for result in results
+        ]
+        headers = ["Payload", "Status Code", "Sensitive Data Detected"]
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+
     def _display_summary(self, results: List[Dict]):
         """
-        Display a summary of the scan results.
+        Display a summary of the scan results with enhanced formatting.
         """
         vulnerabilities = [result for result in results if result["sensitive_data_detected"]]
-        print(f"{Fore.CYAN}Scan Summary:{Style.RESET_ALL}")
+        print(f"\n{Fore.CYAN}Scan Summary:{Style.RESET_ALL}")
         print(f"{Fore.GREEN}Total Payloads Tested: {len(results)}{Style.RESET_ALL}")
         print(f"{Fore.RED}Vulnerabilities Found: {len(vulnerabilities)}{Style.RESET_ALL}")
+
         if vulnerabilities:
             print(f"{Fore.RED}Vulnerable Payloads:{Style.RESET_ALL}")
             for vuln in vulnerabilities:
-                print(f"{Fore.RED}- {vuln['payload']}{Style.RESET_ALL}")
+                print(f"- {Fore.RED}{vuln['payload']}{Style.RESET_ALL}")
+
+        # Optionally visualize the results
+        if len(results) > 0:
+            visualize = input("\nDo you want to visualize the results? (y/n): ").strip().lower()
+            if visualize == "y":
+                self.visualize_results(results)
