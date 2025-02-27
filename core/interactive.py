@@ -1,11 +1,13 @@
-import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTextEdit, QCheckBox, QProgressBar, QMessageBox,
-    QFileDialog, QComboBox, QMenuBar, QAction, QMenu
+    QFileDialog, QComboBox, QMenuBar, QAction, QMenu, QDialog, QRadioButton,
+    QDialogButtonBox, QColorDialog, QFormLayout 
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSettings
+from PyQt5.QtGui import QColor, QPalette
 from core.IDORChecker import IDORChecker
+import sys
 
 class ScanWorker(QThread):
     """Worker thread for running the scan in the background."""
@@ -13,13 +15,14 @@ class ScanWorker(QThread):
     progress_update = pyqtSignal(int)  # Signal for updating progress
     finished = pyqtSignal()  # Signal when the scan is complete
 
-    def __init__(self, url, test_values, output_file, payload_types, method="GET"):
+    def __init__(self, url, test_values, output_file, payload_types, method="GET", proxy=None):
         super().__init__()
         self.url = url
         self.test_values = test_values
         self.output_file = output_file
         self.payload_types = payload_types
         self.method = method
+        self.proxy = proxy
         self.stop_flag = False
 
     def stop(self):
@@ -29,7 +32,12 @@ class ScanWorker(QThread):
     def run(self):
         """Run the IDOR vulnerability scan."""
         try:
-            checker = IDORChecker(self.url, verbose=True, logger=self.log_message.emit)
+            checker = IDORChecker(
+                self.url,
+                verbose=True,
+                logger=self.log_message.emit,
+                proxy=self.proxy  # Pass the proxy configuration
+            )
 
             # Generate payloads based on selected types
             all_payloads = checker._generate_payloads("id", self.test_values)
@@ -67,12 +75,78 @@ class ScanWorker(QThread):
         finally:
             self.finished.emit()
 
+class PreferencesDialog(QDialog):
+    """Dialog for setting preferences (e.g., theme)."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Preferences")
+        layout = QVBoxLayout()
+
+        # Theme selection
+        self.theme_label = QLabel("Select Theme:")
+        layout.addWidget(self.theme_label)
+
+        self.light_radio = QRadioButton("Light Mode")
+        self.dark_radio = QRadioButton("Dark Mode")
+        layout.addWidget(self.light_radio)
+        layout.addWidget(self.dark_radio)
+
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+        self.setLayout(layout)
+
+    def get_theme(self):
+        """Return the selected theme."""
+        if self.dark_radio.isChecked():
+            return "dark"
+        return "light"
+
+class ProxySettingsDialog(QDialog):
+    """Dialog for setting proxy configurations."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Proxy Settings")
+        layout = QFormLayout()
+
+        # HTTP Proxy
+        self.http_proxy_label = QLabel("HTTP Proxy:")
+        self.http_proxy_input = QLineEdit()
+        layout.addRow(self.http_proxy_label, self.http_proxy_input)
+
+        # HTTPS Proxy
+        self.https_proxy_label = QLabel("HTTPS Proxy:")
+        self.https_proxy_input = QLineEdit()
+        layout.addRow(self.https_proxy_label, self.https_proxy_input)
+
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+        self.setLayout(layout)
+
+    def get_proxies(self):
+        """Return the proxy settings as a dictionary."""
+        return {
+            "http": self.http_proxy_input.text().strip(),
+            "https": self.https_proxy_input.text().strip(),
+        }
+
 class IDORScannerGUI(QMainWindow):
     """Main GUI window for the IDOR Vulnerability Scanner."""
     def __init__(self):
         super().__init__()
         self.setWindowTitle("IDOR Vulnerability Scanner")
         self.setGeometry(100, 100, 800, 600)
+
+        # Load settings
+        self.settings = QSettings("IDORScanner", "Preferences")
+        self.load_settings()
 
         # Central widget and layout
         central_widget = QWidget()
@@ -87,22 +161,25 @@ class IDORScannerGUI(QMainWindow):
         file_menu = self.menu_bar.addMenu("File")
         save_action = QAction("Save Results", self)
         save_action.triggered.connect(self.select_output_file)
+        proxy_action = QAction("Proxy Settings", self)
+        proxy_action.triggered.connect(self.show_proxy_settings)
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(save_action)
+        file_menu.addAction(proxy_action)
         file_menu.addAction(exit_action)
-
-        # View Menu
-        view_menu = self.menu_bar.addMenu("View")
-        clear_log_action = QAction("Clear Log", self)
-        clear_log_action.triggered.connect(self.clear_log)
-        view_menu.addAction(clear_log_action)
 
         # Edit Menu
         edit_menu = self.menu_bar.addMenu("Edit")
         preferences_action = QAction("Preferences", self)
         preferences_action.triggered.connect(self.show_preferences)
         edit_menu.addAction(preferences_action)
+
+        # View Menu
+        view_menu = self.menu_bar.addMenu("View")
+        clear_log_action = QAction("Clear Log", self)
+        clear_log_action.triggered.connect(self.clear_log)
+        view_menu.addAction(clear_log_action)
 
         # Help Menu
         help_menu = self.menu_bar.addMenu("Help")
@@ -183,6 +260,70 @@ class IDORScannerGUI(QMainWindow):
         # Worker thread
         self.worker = None
 
+    def load_settings(self):
+        """Load user preferences from QSettings."""
+        theme = self.settings.value("theme", "light")
+        if theme == "dark":
+            self.apply_dark_theme()
+        else:
+            self.apply_light_theme()
+
+        self.proxy_settings = self.settings.value("proxy", {"http": "", "https": ""})
+
+    def apply_dark_theme(self):
+        """Apply Dark Mode theme."""
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(53, 53, 53))
+        palette.setColor(QPalette.WindowText, Qt.white)
+        palette.setColor(QPalette.Base, QColor(25, 25, 25))
+        palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
+        palette.setColor(QPalette.ToolTipBase, Qt.white)
+        palette.setColor(QPalette.ToolTipText, Qt.white)
+        palette.setColor(QPalette.Text, Qt.white)
+        palette.setColor(QPalette.Button, QColor(53, 53, 53))
+        palette.setColor(QPalette.ButtonText, Qt.white)
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Link, QColor(42, 130, 218))
+        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+        palette.setColor(QPalette.HighlightedText, Qt.black)
+        self.setPalette(palette)
+
+    def apply_light_theme(self):
+        """Apply Light Mode theme."""
+        palette = QPalette()
+        palette.setColor(QPalette.Window, Qt.white)
+        palette.setColor(QPalette.WindowText, Qt.black)
+        palette.setColor(QPalette.Base, QColor(240, 240, 240))
+        palette.setColor(QPalette.AlternateBase, QColor(220, 220, 220))
+        palette.setColor(QPalette.ToolTipBase, Qt.white)
+        palette.setColor(QPalette.ToolTipText, Qt.black)
+        palette.setColor(QPalette.Text, Qt.black)
+        palette.setColor(QPalette.Button, Qt.white)
+        palette.setColor(QPalette.ButtonText, Qt.black)
+        palette.setColor(QPalette.BrightText, Qt.red)
+        palette.setColor(QPalette.Link, QColor(0, 0, 255))
+        palette.setColor(QPalette.Highlight, QColor(0, 120, 215))
+        palette.setColor(QPalette.HighlightedText, Qt.white)
+        self.setPalette(palette)
+
+    def show_preferences(self):
+        """Show the preferences dialog."""
+        dialog = PreferencesDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            theme = dialog.get_theme()
+            self.settings.setValue("theme", theme)
+            if theme == "dark":
+                self.apply_dark_theme()
+            else:
+                self.apply_light_theme()
+
+    def show_proxy_settings(self):
+        """Show the proxy settings dialog."""
+        dialog = ProxySettingsDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.proxy_settings = dialog.get_proxies()
+            self.settings.setValue("proxy", self.proxy_settings)
+
     def select_output_file(self):
         """Open file dialog to select an output file."""
         options = QFileDialog.Options()
@@ -210,7 +351,7 @@ class IDORScannerGUI(QMainWindow):
 
         self.run_button.setEnabled(False)
         self.stop_button.setEnabled(True)
-        self.worker = ScanWorker(url, test_values, output_file, payload_types, method=method)
+        self.worker = ScanWorker(url, test_values, output_file, payload_types, method=method, proxy=self.proxy_settings)
         self.worker.log_message.connect(self.update_log)
         self.worker.progress_update.connect(self.update_progress)
         self.worker.finished.connect(self.scan_finished)
@@ -241,10 +382,6 @@ class IDORScannerGUI(QMainWindow):
     def clear_log(self):
         """Clear the log area."""
         self.log_area.clear()
-
-    def show_preferences(self):
-        """Show preferences dialog (placeholder)."""
-        QMessageBox.information(self, "Preferences", "Preferences dialog will be implemented soon.")
 
     def show_about(self):
         """Show about dialog."""
