@@ -1,17 +1,13 @@
 import argparse
-import json
-from core.banner import banner
 from core.IDORChecker import IDORChecker  # Assuming you separate the IDORChecker class
-from core.interactive import interactive_mode  # Import the GUI function
+from core.banner import banner
+import json
+from colorama import Fore, Style, init
 
 def main():
     banner()
-    print("")
-    
-    parser = argparse.ArgumentParser(
-        description="Ultimate IDOR Vulnerability Checker",
-        prog="""npython IDOR-Forge.py -u "https://example.com/api/resource?id=1" -p -m GET --proxy "http://127.0.0.1:8080" -v -o results.csv --output-format csv\n       python IDOR-Forge.py -u http://example.com/resource?id=1 -p -m GET --output results.csv --output-format csv --test-values [100,200,300] --sensitive-keywords ["password", "email"]
-    """)
+
+    parser = argparse.ArgumentParser(description="Ultimate IDOR Vulnerability Checker")
     parser.add_argument("-u", "--url", help="Target URL to test for IDOR vulnerabilities")
     parser.add_argument("-p", "--parameters", action="store_true", help="Scan all parameters in the URL")
     parser.add_argument("-m", "--method", default="GET", help="HTTP method to use (GET, POST, PUT, DELETE)")
@@ -24,11 +20,16 @@ def main():
     parser.add_argument("--test-values", help="Custom test values in JSON format")
     parser.add_argument("--sensitive-keywords", help="Custom sensitive keywords in JSON format")
     parser.add_argument("--interactive", action="store_true", help="Launch interactive GUI mode")
-    parser.add_argument("-Rv", "--report-and-visualize", action="store_true", help="Enable reporting and visualization")
+    parser.add_argument("--login-url", help="URL for the login page")
+    parser.add_argument("--credentials", help="Login credentials in JSON format (e.g., '{\"username\": \"admin\", \"password\": \"password\"}')")
+    parser.add_argument("--login-method", default="POST", help="HTTP method to use for login (default: POST)")
+    parser.add_argument("--max-workers", type=int, default=5, help="Number of threads for multi-threaded scanning")
+
 
     args = parser.parse_args()
 
     if args.interactive:
+        from core.interactive import interactive_mode
         interactive_mode()
         return
 
@@ -64,6 +65,15 @@ def main():
             print(f"Error parsing sensitive keywords: {e}")
             return
 
+    # Parse login credentials
+    credentials = None
+    if args.credentials:
+        try:
+            credentials = json.loads(args.credentials)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing credentials: {e}")
+            return
+
     # Initialize IDORChecker
     checker = IDORChecker(
         args.url,
@@ -73,6 +83,12 @@ def main():
         verbose=args.verbose,
         sensitive_keywords=sensitive_keywords,
     )
+
+    # Perform login if credentials are provided
+    if args.login_url and credentials:
+        if not checker.login(args.login_url, credentials, method=args.login_method):
+            print(f"{Fore.RED}Failed to log in. Exiting...{Style.RESET_ALL}")
+            return
 
     # If -p switch is used, scan all parameters in the URL
     if args.parameters:
@@ -99,20 +115,14 @@ def main():
             output_format=args.output_format,
         )
 
-    # Generate report and visualize results if -Rv is specified
-    if args.report_and_visualize:
-        if not results:
-            print(f"{Fore.YELLOW}No results to report or visualize.{Style.RESET_ALL}")
-            return
+    # Generate report and visualize results if requested
+    if hasattr(checker, "generate_report"):
+        checker.generate_report(results, "idor_report.txt", format_type="txt")
 
-        # Generate a detailed report
-        report_output = "idor_report.txt"  # Default report file name
-        checker.generate_report(results, report_output, format_type="txt")
-        print(f"{Fore.GREEN}Report generated: {report_output}{Style.RESET_ALL}")
-
-        # Visualize results
-        print(f"{Fore.CYAN}Generating visualizations...{Style.RESET_ALL}")
-        checker.visualize_results(results)
+    if hasattr(checker, "visualize_results"):
+        visualize = input("Do you want to visualize the results? (y/n): ").strip().lower()
+        if visualize == "y":
+            checker.visualize_results(results)
 
 if __name__ == "__main__":
     main()
