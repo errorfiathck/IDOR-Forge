@@ -35,6 +35,7 @@ class IDORChecker:
         timeout: int = 10,
         max_retries: int = 3,
         logger=None,  # New parameter for logging
+        max_workers: int = 5,  # Number of threads for scanning
     ):
         """
         Initialize the IDORChecker with the target URL, delay between requests, custom headers, proxy, verbose mode, and sensitive keywords.
@@ -59,8 +60,55 @@ class IDORChecker:
         self.payload_history = []
         self.logger = logger if logger else print  # Use logger if provided, otherwise default to print
         self.payload_history_lock = Lock()  # Thread-safe lock for payload history
+        self.max_workers = max_workers  # Maximum number of threads
 
+    def login(self, login_url: str, credentials: Dict, method: str = "POST") -> bool:
+        """
+        Perform a login request to obtain session cookies or tokens.
+        :param login_url: The URL to send the login request to.
+        :param credentials: A dictionary containing the login credentials (e.g., {"username": "admin", "password": "password"}).
+        :param method: The HTTP method to use for the login request (default: POST).
+        :return: True if login is successful, False otherwise.
+        """
+        try:
+            response = self.session.request(
+                method=method.upper(),
+                url=login_url,
+                data=credentials,
+                headers=self.headers,
+                proxies=self.proxy,
+                timeout=self.timeout,
+            )
+            if response.status_code == 200 or response.status_code == 302:
+                print(f"{Fore.GREEN}Login successful.{Style.RESET_ALL}")
+                return True
+            else:
+                print(f"{Fore.RED}Login failed. Status Code: {response.status_code}{Style.RESET_ALL}")
+                return False
+        except requests.RequestException as e:
+            print(f"{Fore.RED}Error during login: {e}{Style.RESET_ALL}")
+            return False
+    def check_idor(self, param: str, test_values: List[str], method: str = "GET") -> List[Dict]:
+        """
+        Check for IDOR vulnerabilities in the specified parameter using multi-threading.
+        """
+        payloads = self._generate_payloads(param, test_values)
 
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = [
+                executor.submit(self._test_payload, payload, method) for payload in payloads
+            ]
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result()
+                    if result:
+                        results.append(result)
+                except Exception as e:
+                    self.logger(f"{Fore.RED}Error testing payload: {e}{Style.RESET_ALL}")
+
+        return results
+    
     def _parse_url(self, url: str) -> tuple:
         """
         Parse the URL into base URL and query parameters.
@@ -185,44 +233,63 @@ class IDORChecker:
         if "Retry-After" in response.headers:  # Retry-After header
             return True
         return False
-
-    def _test_payload(self, payload: Dict, method: str) -> Dict:
+    
+    def _contains_sensitive_data(self, response_content: str) -> bool:
         """
-        Test a single payload and return the result.
+        Check if the response contains any sensitive keywords.
         """
-        if self.verbose:
-            print(f"{Fore.CYAN}Testing payload: {payload}{Style.RESET_ALL}")
-        response = self._send_request(payload, method)
-        if response is None:
-            return {}
+        return any(keyword in response_content for keyword in self.sensitive_keywords)
+    
+    def _is_rate_limited(self, response: requests.Response) -> bool:
+        """
+        Check if the response indicates rate limiting.
+        """
+        return response.status_code == 429 or "rate limit" in response.text.lower()
+    
+    def _test_payload(self, payload: Dict, method: str = "GET") -> Optional[Dict]:
+        """
+        Test a single payload for IDOR vulnerabilities.
+        """
+        try:
+            response = self.session.request(
+                method=method.upper(),
+                url=self.base_url,
+                params=payload if method.upper() == "GET" else None,
+                data=payload if method.upper() != "GET" else None,
+                headers=self.headers,
+                proxies=self.proxy,
+                timeout=self.timeout,
+            )
 
-        # Detect rate limiting
-        if self._detect_rate_limiting(response):
-            self.rate_limit_detected = True
-            print(f"{Fore.YELLOW}Rate limiting detected. Adjusting delay...{Style.RESET_ALL}")
-            time.sleep(self.delay * 2)  # Increase delay to avoid further rate limiting
+            # Check for rate limiting
+            if self._is_rate_limited(response):
+                self.rate_limit_detected = True
+                self.logger(f"{Fore.YELLOW}Rate limit detected.{Style.RESET_ALL}")
+                return None
 
-        result = {
-            "payload": payload,
-            "status_code": response.status_code,
-            "response_content": response.text[:200],  # Save first 200 chars of response
-            "sensitive_data_detected": self._detect_sensitive_data(response.text),
-        }
+            # Check for sensitive data
+            sensitive_data_detected = self._contains_sensitive_data(response.text)
+            result = {
+                "payload": payload,
+                "status_code": response.status_code,
+                "response_content": response.text[:50] + "...",  # Truncate for brevity
+                "sensitive_data_detected": sensitive_data_detected,
+            }
 
-        # Thread-safe addition to payload history
-        with self.payload_history_lock:
-            self.payload_history.append(result)
+            # Log the result
+            if sensitive_data_detected:
+                self.logger(
+                    f"{Fore.RED}Sensitive data detected with payload: {payload}{Style.RESET_ALL}"
+                )
+            else:
+                self.logger(
+                    f"{Fore.GREEN}Payload tested: {payload} (Status Code: {response.status_code}){Style.RESET_ALL}"
+                )
 
-        if self.verbose:
-            print(f"{Fore.GREEN}Status Code: {result['status_code']}{Style.RESET_ALL}")
-            print(f"{Fore.GREEN}Response Content: {result['response_content']}...{Style.RESET_ALL}")
-            if result["sensitive_data_detected"]:
-                print(f"{Fore.RED}Sensitive data detected!{Style.RESET_ALL}")
-            print("-" * 40)
-
-        # Delay between requests to avoid rate limiting
-        time.sleep(self.delay)
-        return result
+            return result
+        except requests.RequestException as e:
+            self.logger(f"{Fore.RED}Request failed for payload {payload}: {e}{Style.RESET_ALL}")
+            return None
 
     def check_idor(
         self,
