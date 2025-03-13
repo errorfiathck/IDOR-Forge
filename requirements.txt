@@ -4,3 +4,4 @@ argparse
 requests
 PyQt5
 colorama
+matplotlib
