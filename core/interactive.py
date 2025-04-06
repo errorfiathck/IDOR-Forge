@@ -2,12 +2,16 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QTextEdit, QCheckBox, QProgressBar, QMessageBox,
     QFileDialog, QComboBox, QMenuBar, QAction, QMenu, QDialog, QRadioButton,
-    QDialogButtonBox, QColorDialog, QFormLayout 
+    QDialogButtonBox, QFormLayout
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSettings
 from PyQt5.QtGui import QColor, QPalette
 from core.IDORChecker import IDORChecker
 import sys
+import logging
+
+# Setting up the logger for file-based logging
+logging.basicConfig(filename='idor_forge_scan.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
 class ScanWorker(QThread):
     """Worker thread for running the scan in the background."""
@@ -15,7 +19,7 @@ class ScanWorker(QThread):
     progress_update = pyqtSignal(int)  # Signal for updating progress
     finished = pyqtSignal()  # Signal when the scan is complete
 
-    def __init__(self, url, test_values, output_file, payload_types, method="GET", proxy=None):
+    def __init__(self, url, test_values, output_file, payload_types, method="GET", proxy=None, multi_threaded=False):
         super().__init__()
         self.url = url
         self.test_values = test_values
@@ -23,6 +27,7 @@ class ScanWorker(QThread):
         self.payload_types = payload_types
         self.method = method
         self.proxy = proxy
+        self.multi_threaded = multi_threaded
         self.stop_flag = False
 
     def stop(self):
@@ -52,17 +57,28 @@ class ScanWorker(QThread):
                 if "xml" in self.payload_types and "xml" in payload:
                     selected_payloads.append(payload)
 
-            # Run the scan
+            # Run the scan (with multi-threading if enabled)
             total_payloads = len(selected_payloads)
             results = []
-            for i, payload in enumerate(selected_payloads):
-                if self.stop_flag:
-                    self.log_message.emit("Scan stopped by user.")
-                    break
-                self.log_message.emit(f"Testing payload: {payload}")
-                result = checker._test_payload(payload, self.method)
-                results.append(result)
-                self.progress_update.emit(int((i + 1) * 100 / total_payloads))
+            if self.multi_threaded:
+                # Run in parallel using multiple threads (here, using QThreadPool or similar for concurrency)
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    future_results = [executor.submit(self.test_payload, checker, payload) for payload in selected_payloads]
+                    for future in future_results:
+                        result = future.result()
+                        results.append(result)
+                        self.progress_update.emit(int((len(results)) * 100 / total_payloads))
+            else:
+                # Single-threaded scan
+                for i, payload in enumerate(selected_payloads):
+                    if self.stop_flag:
+                        self.log_message.emit("Scan stopped by user.")
+                        break
+                    self.log_message.emit(f"Testing payload: {payload}")
+                    result = checker._test_payload(payload, self.method)
+                    results.append(result)
+                    self.progress_update.emit(int((i + 1) * 100 / total_payloads))
 
             # Save results to file if specified
             if self.output_file:
@@ -75,8 +91,12 @@ class ScanWorker(QThread):
         finally:
             self.finished.emit()
 
+    def test_payload(self, checker, payload):
+        """Test a single payload for vulnerabilities."""
+        return checker._test_payload(payload, self.method)
+
 class PreferencesDialog(QDialog):
-    """Dialog for setting preferences (e.g., theme)."""
+    """Dialog for setting preferences (e.g., theme, multi-threaded scanning)."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Preferences")
@@ -91,6 +111,10 @@ class PreferencesDialog(QDialog):
         layout.addWidget(self.light_radio)
         layout.addWidget(self.dark_radio)
 
+        # Multi-threaded scanning checkbox
+        self.multi_threaded_checkbox = QCheckBox("Enable Multi-threaded Scanning")
+        layout.addWidget(self.multi_threaded_checkbox)
+
         # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
@@ -104,6 +128,10 @@ class PreferencesDialog(QDialog):
         if self.dark_radio.isChecked():
             return "dark"
         return "light"
+
+    def is_multi_threaded(self):
+        """Return whether multi-threaded scanning is enabled."""
+        return self.multi_threaded_checkbox.isChecked()
 
 class ProxySettingsDialog(QDialog):
     """Dialog for setting proxy configurations."""
@@ -269,6 +297,7 @@ class IDORScannerGUI(QMainWindow):
             self.apply_light_theme()
 
         self.proxy_settings = self.settings.value("proxy", {"http": "", "https": ""})
+        self.multi_threaded = self.settings.value("multi_threaded", False)
 
     def apply_dark_theme(self):
         """Apply Dark Mode theme."""
@@ -301,40 +330,37 @@ class IDORScannerGUI(QMainWindow):
         palette.setColor(QPalette.Button, Qt.white)
         palette.setColor(QPalette.ButtonText, Qt.black)
         palette.setColor(QPalette.BrightText, Qt.red)
-        palette.setColor(QPalette.Link, QColor(0, 0, 255))
-        palette.setColor(QPalette.Highlight, QColor(0, 120, 215))
-        palette.setColor(QPalette.HighlightedText, Qt.white)
+        palette.setColor(QPalette.Link, QColor(42, 130, 218))
+        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+        palette.setColor(QPalette.HighlightedText, Qt.black)
         self.setPalette(palette)
+
+    def select_output_file(self):
+        """Select output file for saving results."""
+        options = QFileDialog.Options()
+        output_file, _ = QFileDialog.getSaveFileName(self, "Save Results", "", "JSON Files (*.json);;All Files (*)", options=options)
+        if output_file:
+            self.output_input.setText(output_file)
 
     def show_preferences(self):
         """Show the preferences dialog."""
-        dialog = PreferencesDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            theme = dialog.get_theme()
-            self.settings.setValue("theme", theme)
-            if theme == "dark":
-                self.apply_dark_theme()
-            else:
-                self.apply_light_theme()
+        preferences_dialog = PreferencesDialog(self)
+        if preferences_dialog.exec_():
+            self.settings.setValue("theme", preferences_dialog.get_theme())
+            self.settings.setValue("multi_threaded", preferences_dialog.is_multi_threaded())
+            self.load_settings()
 
     def show_proxy_settings(self):
-        """Show the proxy settings dialog."""
-        dialog = ProxySettingsDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            self.proxy_settings = dialog.get_proxies()
+        """Show proxy settings dialog."""
+        proxy_dialog = ProxySettingsDialog(self)
+        if proxy_dialog.exec_():
+            self.proxy_settings = proxy_dialog.get_proxies()
             self.settings.setValue("proxy", self.proxy_settings)
 
-    def select_output_file(self):
-        """Open file dialog to select an output file."""
-        options = QFileDialog.Options()
-        file_name, _ = QFileDialog.getSaveFileName(self, "Save Output File", "", "JSON Files (*.json);;All Files (*)", options=options)
-        if file_name:
-            self.output_input.setText(file_name)
-
     def start_scan(self):
-        """Start the scan process."""
+        """Start the scan."""
         url = self.url_input.text().strip()
-        test_values = [value.strip() for value in self.test_values_input.text().split(",") if value.strip()]
+        test_values = self.test_values_input.text().strip().split(",")
         output_file = self.output_input.text().strip()
         payload_types = []
         if self.sql_check.isChecked():
@@ -343,41 +369,41 @@ class IDORScannerGUI(QMainWindow):
             payload_types.append("xss")
         if self.xml_check.isChecked():
             payload_types.append("xml")
-        method = self.method_combo.currentText()
 
-        if not url or not test_values:
-            QMessageBox.critical(self, "Error", "Please provide a URL and test values.")
-            return
+        method = self.method_combo.currentText()
+        multi_threaded = self.multi_threaded
+
+        self.worker = ScanWorker(
+            url, test_values, output_file, payload_types, method=method,
+            proxy=self.proxy_settings, multi_threaded=multi_threaded
+        )
+        self.worker.log_message.connect(self.log_message)
+        self.worker.progress_update.connect(self.update_progress)
+        self.worker.finished.connect(self.scan_finished)
 
         self.run_button.setEnabled(False)
         self.stop_button.setEnabled(True)
-        self.worker = ScanWorker(url, test_values, output_file, payload_types, method=method, proxy=self.proxy_settings)
-        self.worker.log_message.connect(self.update_log)
-        self.worker.progress_update.connect(self.update_progress)
-        self.worker.finished.connect(self.scan_finished)
         self.worker.start()
 
     def stop_scan(self):
-        """Stop the scan process."""
+        """Stop the ongoing scan."""
         if self.worker:
             self.worker.stop()
-            self.worker.wait()  # Wait for the thread to finish
-        self.run_button.setEnabled(True)
-        self.stop_button.setEnabled(False)
+            self.log_message("Scan stopped by user.")
 
-    def update_log(self, message):
-        """Update the log area with a new message."""
+    def log_message(self, message):
+        """Log messages to the GUI log."""
         self.log_area.append(message)
 
-    def update_progress(self, value):
-        """Update the progress bar value."""
-        self.progress_bar.setValue(value)
+    def update_progress(self, progress):
+        """Update the progress bar."""
+        self.progress_bar.setValue(progress)
 
     def scan_finished(self):
-        """Handle actions when the scan is finished."""
+        """Handle the completion of the scan."""
         self.run_button.setEnabled(True)
         self.stop_button.setEnabled(False)
-        QMessageBox.information(self, "Info", "Scan completed.")
+        self.log_message("Scan completed.")
 
     def clear_log(self):
         """Clear the log area."""
