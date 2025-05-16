@@ -32,7 +32,7 @@
 IDOR Forge is a powerful and versatile tool designed to detect Insecure Direct Object Reference (IDOR) vulnerabilities in web applications. IDOR vulnerabilities occur when an application exposes direct references to internal objects (e.g., database keys, file paths) without proper authorization checks, allowing attackers to access unauthorized data. This tool automates the process of identifying such vulnerabilities by dynamically generating and testing payloads, analyzing responses, and reporting potential issues.
 
 
-![Screen Shot](./IMG/IDOR-Forge_V1.5.png)
+![Screen Shot](./IMG/IDOR-Forge_V1.5.2.png)
 
 ## Flowchart 💾
 
@@ -127,6 +127,8 @@ Options
 - --interactive: Launch interactive GUI mode.
   
 - -Rv, --report-and-visualize: Enable reporting and visualization
+
+- --num-range: Range of numbers to test as payloads, format: start-end (e.g., 1-100)
 
 ## Interactive GUI Mode
 ```
