@@ -24,7 +24,7 @@ def main():
     parser.add_argument("--credentials", help="Login credentials in JSON format (e.g., '{\"username\": \"admin\", \"password\": \"password\"}')")
     parser.add_argument("--login-method", default="POST", help="HTTP method to use for login (default: POST)")
     parser.add_argument("--max-workers", type=int, default=5, help="Number of threads for multi-threaded scanning")
-
+    parser.add_argument("--num-range", help="Range of numbers to test as payloads, format: start-end (e.g., 1-100)")
 
     args = parser.parse_args()
 
@@ -48,12 +48,30 @@ def main():
         proxy = {"http": args.proxy, "https": args.proxy}
 
     # Parse custom test values
-    test_values = [1, 2, 3, 4, 5]  # Default test values
+    test_values = []
     if args.test_values:
         try:
             test_values = json.loads(args.test_values)  # Convert JSON string to list
         except json.JSONDecodeError as e:
             print(f"Error parsing test values: {e}")
+            return
+    else:
+        # Default test values if none provided
+        test_values = [1, 2, 3, 4, 5]
+
+    # Parse number range if provided
+    if args.num_range:
+        try:
+            start_str, end_str = args.num_range.split("-")
+            start, end = int(start_str), int(end_str)
+            if start > end or start < 0:
+                raise ValueError("Invalid range values")
+            # Generate the list of numbers as strings
+            num_range_values = [str(n) for n in range(start, end + 1)]
+            # Combine with test_values (ensure no duplicates)
+            test_values = list(set(test_values) | set(num_range_values))
+        except Exception as e:
+            print(f"Error parsing --num-range argument: {e}")
             return
 
     # Parse custom sensitive keywords
