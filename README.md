@@ -134,7 +134,7 @@ Options
 ```
 python IDOR-Forge.py --interactive
 ```
-![Screen Shot](./IMG/interactive_V1.4.png)
+![Screen Shot](./IMG/interactive_V1.5.png)
 
 The GUI allows you to input:
 
