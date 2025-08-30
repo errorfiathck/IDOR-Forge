@@ -36,7 +36,7 @@ IDOR Forge is a powerful and versatile tool designed to detect Insecure Direct O
 
 ## Flowchart 💾
 
-![Screen Shot](./IMG/FlowChart.png)
+![Screen Shot](./IMG/FlowChart_sec.png)
 
 ## Features ✨
 
