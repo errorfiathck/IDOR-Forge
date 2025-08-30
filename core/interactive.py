@@ -521,7 +521,7 @@ class IDORScannerGUI(QMainWindow):
 
     def show_about(self):
         """Show about dialog."""
-        QMessageBox.about(self, "About IDOR-Forge", "IDOR Vulnerability Scanner v1.5.1\nDeveloped by errorfiat\n\nIt`s an advanced and versatile tool designed to detect Insecure Direct Object Reference (IDOR) vulnerabilities in web applications.")
+        QMessageBox.about(self, "About IDOR-Forge", "IDOR Vulnerability Scanner v1.5.1\nDeveloped by errorfiat\n\nIt`s an advanced and versatile tool designed to detect Insecure Direct Object Reference (IDOR) vulnerabilities in web applications.\n\n   Telegram ID: @Error_fiat\n   Twitter(X): @ErrorFiat\n\nerrorfiathck@Gmail.com")
 
 def interactive_mode():
     app = QApplication(sys.argv)
