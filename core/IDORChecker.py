@@ -569,11 +569,15 @@ class IDORChecker:
         """
         xss_payload = payload.get("xss")
         if xss_payload:
-            if re.search(re.escape(xss_payload), content, re.IGNORECASE):
+            escaped_payload = re.escape(xss_payload)
+            # Check for direct reflection of the payload
+            if re.search(escaped_payload, content, re.IGNORECASE):
                 return True
-            if re.search(r"on\w+=", re.escape(xss_payload), content):
+            # Check for payload in event handler attributes (e.g., onclick="payload")
+            if re.search(rf'on\w+="{escaped_payload}"', content, re.IGNORECASE):
                 return True
-            if re.search(r"alert\(" + re.escape(xss_payload), content):
+            # Check for payload in alert() or similar JS sinks
+            if re.search(rf"alert\(['\"]?{escaped_payload}['\"]?\)", content, re.IGNORECASE):
                 return True
         return False
 
@@ -742,3 +746,37 @@ class IDORChecker:
         headers = ["URL", "Status Code", "Sensitive Data", "IDOR", "SQL Injection", "XSS", "XML", "Session Role"]
         if table_data:
             print(tabulate(table_data, headers=headers, tablefmt="grid"))
+
+    def _display_summary(self, results: List[Dict]):
+        """
+        Display a clean summary of scan results.
+        """
+        vulnerabilities = [
+            r for r in results
+            if r["sensitive_data_detected"] or r["idor_detected"] or r["sql_injection_detected"] or r["xss_detected"] or r["xml_detected"]
+        ]
+        self.logger(f"\n{Fore.CYAN}Scan Summary:{Style.RESET_ALL}")
+        self.logger(f"Total Payloads Tested: {len(results)}")
+        self.logger(f"Vulnerabilities Found: {len(vulnerabilities)}")
+        if vulnerabilities:
+            self.logger(f"\n{Fore.RED}Vulnerabilities Detected:{Style.RESET_ALL}")
+            for result in vulnerabilities:
+                self.logger(f"URL: {result['url']}")
+                self.logger(f"Payload: {result['payload']}")
+                self.logger(f"Status Code: {result['status_code']}")
+                self.logger(f"Sensitive Data: {result['sensitive_data_detected']}")
+                self.logger(f"IDOR: {result['idor_detected']}")
+                self.logger(f"SQL Injection: {result['sql_injection_detected']}")
+                self.logger(f"XSS: {result['xss_detected']}")
+                self.logger(f"XML: {result['xml_detected']}")
+                self.logger(f"Response Time: {result['response_time']:.2f}s")
+                self.logger(f"Comparison: {result['comparison']}")
+                self.logger(f"Session Role: {result.get('session_role', 'default')}")
+                self.logger("-" * 40)
+        else:
+            self.logger(f"{Fore.GREEN}No vulnerabilities detected.{Style.RESET_ALL}")
+
+        if results and self.verbose:
+            visualize = input("\nVisualize results? (y/n): ").strip().lower()
+            if visualize == "y":
+                self.visualize_results(results)
