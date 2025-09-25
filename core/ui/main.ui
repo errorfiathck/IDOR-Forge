@@ -1,283 +1,283 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>MainWindow</class>
- <widget class="QMainWindow" name="MainWindow">
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>900</width>
-    <height>700</height>
-   </rect>
-  </property>
-  <property name="windowTitle">
-   <string>IDOR Vulnerability Scanner</string>
-  </property>
-  <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="verticalLayout">
-    <item>
-     <layout class="QHBoxLayout" name="url_layout">
-      <item>
-       <widget class="QLabel" name="url_label">
-        <property name="text">
-         <string>Target URL:</string>
+    <class>MainWindow</class>
+    <widget class="QMainWindow" name="MainWindow">
+        <property name="geometry">
+            <rect>
+                <x>0</x>
+                <y>0</y>
+                <width>900</width>
+                <height>700</height>
+            </rect>
         </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="url_input">
-        <property name="placeholderText">
-         <string>e.g., http://127.0.0.1:5000/profile?user_id=2</string>
+        <property name="windowTitle">
+            <string>IDOR Vulnerability Scanner</string>
         </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="param_layout">
-      <item>
-       <widget class="QLabel" name="param_label">
-        <property name="text">
-         <string>Parameter to Test:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="param_input">
-        <property name="placeholderText">
-         <string>e.g., user_id</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="test_values_layout">
-      <item>
-       <widget class="QLabel" name="test_values_label">
-        <property name="text">
-         <string>Test Values (comma-separated):</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="test_values_input">
-        <property name="placeholderText">
-         <string>e.g., 1,2,3</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="output_layout">
-      <item>
-       <widget class="QLabel" name="output_label">
-        <property name="text">
-         <string>Output File:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QLineEdit" name="output_input"/>
-      </item>
-      <item>
-       <widget class="QComboBox" name="output_format_combo">
-        <item>
-         <property name="text">
-          <string>json</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>txt</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>csv</string>
-         </property>
-        </item>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="browse_button">
-        <property name="text">
-         <string>Browse</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <layout class="QVBoxLayout" name="payload_layout">
-      <item>
-       <widget class="QLabel" name="payload_label">
-        <property name="text">
-         <string>Select Payload Types:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="sql_check">
-        <property name="text">
-         <string>SQL Injection</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="xss_check">
-        <property name="text">
-         <string>XSS (Cross-site Scripting)</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QCheckBox" name="xml_check">
-        <property name="text">
-         <string>XML Injection</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="method_layout">
-      <item>
-       <widget class="QLabel" name="method_label">
-        <property name="text">
-         <string>HTTP Method:</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QComboBox" name="method_combo">
-        <item>
-         <property name="text">
-          <string>GET</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>POST</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>PUT</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>DELETE</string>
-         </property>
-        </item>
-       </widget>
-      </item>
-     </layout>
-    </item>
-    <item>
-     <widget class="QTextEdit" name="log_area">
-      <property name="readOnly">
-       <bool>true</bool>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="QProgressBar" name="progress_bar"/>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="button_layout">
-      <item>
-       <widget class="QPushButton" name="run_button">
-        <property name="text">
-         <string>Run Scan</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QPushButton" name="stop_button">
-        <property name="text">
-         <string>Stop Scan</string>
-        </property>
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </item>
-   </layout>
-  </widget>
-  <widget class="QMenuBar" name="menuBar">
-   <widget class="QMenu" name="menuFile">
-    <property name="title">
-     <string>File</string>
-    </property>
-    <addaction name="actionSave_Results"/>
-    <addaction name="actionProxy_Settings"/>
-    <addaction name="actionLogin_Settings"/>
-    <addaction name="actionExit"/>
-   </widget>
-   <widget class="QMenu" name="menuEdit">
-    <property name="title">
-     <string>Edit</string>
-    </property>
-    <addaction name="actionPreferences"/>
-   </widget>
-   <widget class="QMenu" name="menuView">
-    <property name="title">
-     <string>View</string>
-    </property>
-    <addaction name="actionClear_Log"/>
-   </widget>
-   <widget class="QMenu" name="menuHelp">
-    <property name="title">
-     <string>Help</string>
-    </property>
-    <addaction name="actionAbout"/>
-   </widget>
-   <addaction name="menuFile"/>
-   <addaction name="menuEdit"/>
-   <addaction name="menuView"/>
-   <addaction name="menuHelp"/>
-  </widget>
-  <action name="actionSave_Results">
-   <property name="text">
-    <string>Save Results</string>
-   </property>
-  </action>
-  <action name="actionProxy_Settings">
-   <property name="text">
-    <string>Proxy Settings</string>
-   </property>
-  </action>
-  <action name="actionLogin_Settings">
-   <property name="text">
-    <string>Login Settings</string>
-   </property>
-  </action>
-  <action name="actionExit">
-   <property name="text">
-    <string>Exit</string>
-   </property>
-  </action>
-  <action name="actionPreferences">
-   <property name="text">
-    <string>Preferences</string>
-   </property>
-  </action>
-  <action name="actionClear_Log">
-   <property name="text">
-    <string>Clear Log</string>
-   </property>
-  </action>
-  <action name="actionAbout">
-   <property name="text">
-    <string>About</string>
-   </property>
-  </action>
- </widget>
- <resources/>
- <connections/>
+        <widget class="QWidget" name="centralwidget">
+            <layout class="QVBoxLayout" name="verticalLayout">
+                <item>
+                    <layout class="QHBoxLayout" name="url_layout">
+                        <item>
+                            <widget class="QLabel" name="url_label">
+                                <property name="text">
+                                    <string>Target URL:</string>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QLineEdit" name="url_input">
+                                <property name="placeholderText">
+                                    <string>e.g., http://127.0.0.1:5000/profile?user_id=2</string>
+                                </property>
+                            </widget>
+                        </item>
+                    </layout>
+                </item>
+                <item>
+                    <layout class="QHBoxLayout" name="param_layout">
+                        <item>
+                            <widget class="QLabel" name="param_label">
+                                <property name="text">
+                                    <string>Parameter to Test:</string>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QLineEdit" name="param_input">
+                                <property name="placeholderText">
+                                    <string>e.g., user_id</string>
+                                </property>
+                            </widget>
+                        </item>
+                    </layout>
+                </item>
+                <item>
+                    <layout class="QHBoxLayout" name="test_values_layout">
+                        <item>
+                            <widget class="QLabel" name="test_values_label">
+                                <property name="text">
+                                    <string>Test Values (comma-separated):</string>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QLineEdit" name="test_values_input">
+                                <property name="placeholderText">
+                                    <string>e.g., 1,2,3</string>
+                                </property>
+                            </widget>
+                        </item>
+                    </layout>
+                </item>
+                <item>
+                    <layout class="QHBoxLayout" name="output_layout">
+                        <item>
+                            <widget class="QLabel" name="output_label">
+                                <property name="text">
+                                    <string>Output File:</string>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QLineEdit" name="output_input"/>
+                        </item>
+                        <item>
+                            <widget class="QComboBox" name="output_format_combo">
+                                <item>
+                                    <property name="text">
+                                        <string>json</string>
+                                    </property>
+                                </item>
+                                <item>
+                                    <property name="text">
+                                        <string>txt</string>
+                                    </property>
+                                </item>
+                                <item>
+                                    <property name="text">
+                                        <string>csv</string>
+                                    </property>
+                                </item>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QPushButton" name="browse_button">
+                                <property name="text">
+                                    <string>Browse</string>
+                                </property>
+                            </widget>
+                        </item>
+                    </layout>
+                </item>
+                <item>
+                    <layout class="QVBoxLayout" name="payload_layout">
+                        <item>
+                            <widget class="QLabel" name="payload_label">
+                                <property name="text">
+                                    <string>Select Payload Types:</string>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QCheckBox" name="sql_check">
+                                <property name="text">
+                                    <string>SQL Injection</string>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QCheckBox" name="xss_check">
+                                <property name="text">
+                                    <string>XSS (Cross-site Scripting)</string>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QCheckBox" name="xml_check">
+                                <property name="text">
+                                    <string>XML Injection</string>
+                                </property>
+                            </widget>
+                        </item>
+                    </layout>
+                </item>
+                <item>
+                    <layout class="QHBoxLayout" name="method_layout">
+                        <item>
+                            <widget class="QLabel" name="method_label">
+                                <property name="text">
+                                    <string>HTTP Method:</string>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QComboBox" name="method_combo">
+                                <item>
+                                    <property name="text">
+                                        <string>GET</string>
+                                    </property>
+                                </item>
+                                <item>
+                                    <property name="text">
+                                        <string>POST</string>
+                                    </property>
+                                </item>
+                                <item>
+                                    <property name="text">
+                                        <string>PUT</string>
+                                    </property>
+                                </item>
+                                <item>
+                                    <property name="text">
+                                        <string>DELETE</string>
+                                    </property>
+                                </item>
+                            </widget>
+                        </item>
+                    </layout>
+                </item>
+                <item>
+                    <widget class="QTextEdit" name="log_area">
+                        <property name="readOnly">
+                            <bool>true</bool>
+                        </property>
+                    </widget>
+                </item>
+                <item>
+                    <widget class="QProgressBar" name="progress_bar"/>
+                </item>
+                <item>
+                    <layout class="QHBoxLayout" name="button_layout">
+                        <item>
+                            <widget class="QPushButton" name="run_button">
+                                <property name="text">
+                                    <string>Run Scan</string>
+                                </property>
+                            </widget>
+                        </item>
+                        <item>
+                            <widget class="QPushButton" name="stop_button">
+                                <property name="text">
+                                    <string>Stop Scan</string>
+                                </property>
+                                <property name="enabled">
+                                    <bool>false</bool>
+                                </property>
+                            </widget>
+                        </item>
+                    </layout>
+                </item>
+            </layout>
+        </widget>
+        <widget class="QMenuBar" name="menuBar">
+            <widget class="QMenu" name="menuFile">
+                <property name="title">
+                    <string>File</string>
+                </property>
+                <addaction name="actionSave_Results"/>
+                <addaction name="actionProxy_Settings"/>
+                <addaction name="actionLogin_Settings"/>
+                <addaction name="actionExit"/>
+            </widget>
+            <widget class="QMenu" name="menuEdit">
+                <property name="title">
+                    <string>Edit</string>
+                </property>
+                <addaction name="actionPreferences"/>
+            </widget>
+            <widget class="QMenu" name="menuView">
+                <property name="title">
+                    <string>View</string>
+                </property>
+                <addaction name="actionClear_Log"/>
+            </widget>
+            <widget class="QMenu" name="menuHelp">
+                <property name="title">
+                    <string>Help</string>
+                </property>
+                <addaction name="actionAbout"/>
+            </widget>
+            <addaction name="menuFile"/>
+            <addaction name="menuEdit"/>
+            <addaction name="menuView"/>
+            <addaction name="menuHelp"/>
+        </widget>
+        <action name="actionSave_Results">
+            <property name="text">
+                <string>Save Results</string>
+            </property>
+        </action>
+        <action name="actionProxy_Settings">
+            <property name="text">
+                <string>Proxy Settings</string>
+            </property>
+        </action>
+        <action name="actionLogin_Settings">
+            <property name="text">
+                <string>Login Settings</string>
+            </property>
+        </action>
+        <action name="actionExit">
+            <property name="text">
+                <string>Exit</string>
+            </property>
+        </action>
+        <action name="actionPreferences">
+            <property name="text">
+                <string>Preferences</string>
+            </property>
+        </action>
+        <action name="actionClear_Log">
+            <property name="text">
+                <string>Clear Log</string>
+            </property>
+        </action>
+        <action name="actionAbout">
+            <property name="text">
+                <string>About</string>
+            </property>
+        </action>
+    </widget>
+    <resources/>
+    <connections/>
 </ui>
