@@ -700,7 +700,7 @@ class IDORScannerGUI(QMainWindow):
         QMessageBox.about(
             self,
             "About IDOR-Forge",
-            "IDOR Vulnerability Scanner v2.0\nDeveloped by errorfiat\n\nIt's an advanced and versatile tool designed to detect Insecure Direct Object Reference (IDOR) vulnerabilities in web applications.\n\nTelegram ID: @Error_fiat\nTwitter(X): @ErrorFiat\n\nerrorfiathck@Gmail.com"
+            "IDOR Vulnerability Scanner v2.0\nDeveloped by errorfiat\n\nThe interactive section is designed to make IDOR-Forge accessible to users who prefer a graphical interface over the CLI, particularly for pentesters and security analysts who need to configure complex scans, visualize results in real-time, and manage multiple scan configurations. It leverages PyQt5 for cross-platform GUI rendering and integrates with the core IDORChecker class to perform Insecure Direct Object Reference (IDOR) and related vulnerability scans (e.g., SQL injection, XSS, XXE).\n\nTelegram ID: @Error_fiat\nTwitter(X): @ErrorFiat\n\nerrorfiathck@Gmail.com"
         )
 
 
