@@ -25,6 +25,12 @@ def main():
     parser.add_argument("--login-method", default="POST", help="HTTP method to use for login (default: POST)")
     parser.add_argument("--max-workers", type=int, default=5, help="Number of threads for multi-threaded scanning")
     parser.add_argument("--num-range", help="Range of numbers to test as payloads, format: start-end (e.g., 1-100)")
+    # New args from fixes
+    parser.add_argument("--multi-credentials", help="JSON list of multiple credentials for multi-user testing")
+    parser.add_argument("--similarity-thresholds", help="JSON dict of similarity thresholds (e.g., '{\"structure\": 0.8, \"content\": 0.9}')")
+    parser.add_argument("--evasion", action="store_true", help="Enable evasion techniques (e.g., jitter, UA rotation)")
+    parser.add_argument("--request-type", default="query", choices=["query", "json", "graphql"], help="Request type (query params, JSON body, GraphQL)")
+    parser.add_argument("--auth-type", default="basic", choices=["basic", "oauth", "jwt"], help="Authentication type")
 
     args = parser.parse_args()
 
@@ -92,7 +98,25 @@ def main():
             print(f"Error parsing credentials: {e}")
             return
 
-    # Initialize IDORChecker
+    # New: Parse multi-credentials
+    multi_credentials = None
+    if args.multi_credentials:
+        try:
+            multi_credentials = json.loads(args.multi_credentials)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing multi-credentials: {e}")
+            return
+
+    # New: Parse similarity thresholds
+    thresholds = None
+    if args.similarity_thresholds:
+        try:
+            thresholds = json.loads(args.similarity_thresholds)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing similarity thresholds: {e}")
+            return
+
+    # Initialize IDORChecker with new params
     checker = IDORChecker(
         args.url,
         delay=args.delay,
@@ -100,6 +124,11 @@ def main():
         proxy=proxy,
         verbose=args.verbose,
         sensitive_keywords=sensitive_keywords,
+        multi_credentials=multi_credentials,
+        thresholds=thresholds,
+        evasion=args.evasion,
+        request_type=args.request_type,
+        auth_type=args.auth_type,
     )
 
     # Perform login if credentials are provided
@@ -123,8 +152,19 @@ def main():
                 )
             )
     else:
-        # If -p is not used, test a single parameter (e.g., 'id')
-        param_to_test = "id"
+        # If no param specified, auto-detect or prompt
+        if "id" in checker.params:
+            param_to_test = "id"
+        else:
+            detected_params = [p for p in checker.params if p.lower() in ['id', 'user_id', 'file', 'invoice']]
+            if detected_params:
+                param_to_test = detected_params[0]
+                print(f"{Fore.YELLOW}No param specified. Auto-detected: {param_to_test}. Use -p to scan all.{Style.RESET_ALL}")
+            else:
+                param_to_test = input("Enter parameter to test (e.g., id): ").strip()
+                if not param_to_test:
+                    print(f"{Fore.RED}No parameter provided. Exiting...{Style.RESET_ALL}")
+                    return
         results = checker.check_idor(
             param_to_test,
             test_values,
